@@ -32,17 +32,24 @@ const firebaseConfig = {
 // Initialize Firebase
 export const app = initializeApp(firebaseConfig);
 
-// Initialize Analytics safely (avoids crashing in extension chrome-extension:// origins)
+// Initialize Analytics safely (strictly disabled in extension chrome-extension:// origins to prevent CSP violations)
 export let analytics = null;
-isSupported().then((supported) => {
-  if (supported) {
-    try {
-      analytics = getAnalytics(app);
-    } catch {
-      // Ignored in extension context
+const isExtensionEnv = typeof window !== 'undefined' && (
+  window.location.protocol === 'chrome-extension:' ||
+  (typeof chrome !== 'undefined' && Boolean(chrome?.runtime?.id))
+);
+
+if (!isExtensionEnv) {
+  isSupported().then((supported) => {
+    if (supported) {
+      try {
+        analytics = getAnalytics(app);
+      } catch {
+        // Ignored
+      }
     }
-  }
-}).catch(() => {});
+  }).catch(() => {});
+}
 
 // Initialize Firebase Authentication with fallback persistence (IndexedDB -> LocalStorage -> Memory)
 let authInstance;

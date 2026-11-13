@@ -1,5 +1,6 @@
 # 🪟 GlassTab — Futuristic Glassmorphic AI New Tab Dashboard
 
+[![Direct Download Extension](https://img.shields.io/badge/⚡_Direct_Download-Extension_(.ZIP)-2ea44f?style=for-the-badge&logo=googlechrome&logoColor=white)](https://github.com/Aryansrivastava07/Landing-Page-React/raw/main/glasstab-extension.zip)
 [![Chrome Manifest V3](https://img.shields.io/badge/Chrome%20Extension-Manifest%20V3-4285F4?logo=googlechrome&logoColor=white)](https://developer.chrome.com/docs/extensions/mv3/intro/)
 [![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)](https://react.dev/)
 [![Vite](https://img.shields.io/badge/Vite-5-646CFF?logo=vite&logoColor=white)](https://vitejs.dev/)
@@ -9,6 +10,20 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 > Transform your browser's default blank new tab into a **hyper-customizable, dark-glass cyber-aesthetic productivity cockpit** powered by **Google Gemini 3.8 Flash**, progressive blur-up wallpapers, draggable freeform widgets, and offline-first cloud synchronization.
+
+---
+
+## ⚡ Instant Download (No Git or Coding Required)
+
+Want to use GlassTab right away? You don't need to install Node.js, git, or build anything:
+
+1. **[📥 Download Extension (.ZIP)](https://github.com/Aryansrivastava07/Landing-Page-React/raw/main/glasstab-extension.zip)** *(~4.1 MB)*  
+   *(Alternative: Download only the [`/dist` folder via Download-Directory](https://download-directory.github.io/?url=https://github.com/Aryansrivastava07/Landing-Page-React/tree/main/dist))*
+2. Unzip the downloaded file onto your computer.
+3. Open Google Chrome and navigate to `chrome://extensions`.
+4. Turn on **Developer mode** (top-right toggle).
+5. Click **Load unpacked** and select the unzipped folder.
+6. Open a new tab (`Ctrl + T`) and click **"Keep changes"**!
 
 ---
 
@@ -100,16 +115,9 @@ flowchart TD
 
 ---
 
-## 🚀 Installation & Setup
+## 🚀 Developer Setup (Build From Source)
 
-### Option 1: Quick Install (From Pre-Built Zip)
-1. Download or locate `glasstab-cws-v2.0.2.zip`.
-2. Extract the archive into a folder (e.g. `glasstab-extension/`).
-3. Follow the [Chrome Setup Instructions](#-chrome-setup-instructions) below.
-
----
-
-### Option 2: Build From Source (Developer Mode)
+If you'd like to customize or contribute to the project:
 
 #### Prerequisites
 - [Node.js](https://nodejs.org/) (v18.0 or newer)
@@ -155,7 +163,7 @@ Because Chrome Manifest V3 has strict security boundaries for new tab overrides 
 
 ### 2. Load the Unpacked Extension
 1. Click the **Load unpacked** button in the top-left toolbar.
-2. Select the `dist/` folder inside `Landing-Page-React/` (or the extracted zip directory).
+2. Select the `dist/` folder inside `Landing-Page-React/` (or your extracted zip directory).
 3. You will now see **GlassTab - Custom New Tab Dashboard** listed among your extensions.
 
 ---
@@ -252,6 +260,3 @@ Distributed under the **MIT License**. See `LICENSE` for more information.
 <p align="center">
   Built with ❤️ by Aryan Srivastava for a cleaner, faster, and more beautiful browsing experience.
 </p>
-#   G l a s s T a b 
- 
- 

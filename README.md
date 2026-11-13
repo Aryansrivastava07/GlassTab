@@ -1,6 +1,6 @@
 # 🪟 GlassTab — Futuristic Glassmorphic AI New Tab Dashboard
 
-[![Direct Download Extension](https://img.shields.io/badge/⚡_Direct_Download-Extension_(.ZIP)-2ea44f?style=for-the-badge&logo=googlechrome&logoColor=white)](https://github.com/Aryansrivastava07/Landing-Page-React/raw/main/glasstab-extension.zip)
+[![Direct Download Extension](https://img.shields.io/badge/⚡_Direct_Download-Extension_(.ZIP)-2ea44f?style=for-the-badge&logo=googlechrome&logoColor=white)](https://github.com/Aryansrivastava07/GlassTab/raw/main/glasstab-extension.zip)
 [![Chrome Manifest V3](https://img.shields.io/badge/Chrome%20Extension-Manifest%20V3-4285F4?logo=googlechrome&logoColor=white)](https://developer.chrome.com/docs/extensions/mv3/intro/)
 [![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)](https://react.dev/)
 [![Vite](https://img.shields.io/badge/Vite-5-646CFF?logo=vite&logoColor=white)](https://vitejs.dev/)
@@ -17,8 +17,8 @@
 
 Want to use GlassTab right away? You don't need to install Node.js, git, or build anything:
 
-1. **[📥 Download Extension (.ZIP)](https://github.com/Aryansrivastava07/Landing-Page-React/raw/main/glasstab-extension.zip)** *(~4.1 MB)*  
-   *(Alternative: Download only the [`/dist` folder via Download-Directory](https://download-directory.github.io/?url=https://github.com/Aryansrivastava07/Landing-Page-React/tree/main/dist))*
+1. **[📥 Download Extension (.ZIP)](https://github.com/Aryansrivastava07/GlassTab/raw/main/glasstab-extension.zip)** *(~4.1 MB)*  
+   *(Alternative: Download only the [`/dist` folder via Download-Directory](https://download-directory.github.io/?url=https://github.com/Aryansrivastava07/GlassTab/tree/main/dist))*
 2. Unzip the downloaded file onto your computer.
 3. Open Google Chrome and navigate to `chrome://extensions`.
 4. Turn on **Developer mode** (top-right toggle).
@@ -125,8 +125,8 @@ If you'd like to customize or contribute to the project:
 
 #### 1. Clone the Repository
 ```bash
-git clone https://github.com/Aryansrivastava07/Landing-Page-React.git
-cd Landing-Page-React
+git clone https://github.com/Aryansrivastava07/GlassTab.git
+cd GlassTab
 ```
 
 #### 2. Install Dependencies

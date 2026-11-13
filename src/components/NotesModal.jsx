@@ -30,7 +30,7 @@ import {
   updateUserData,
 } from '../services/databaseService';
 import { getCachedUserData } from '../utils/cacheService';
-import { signInWithGoogle, signInWithEmail, registerWithEmail, getExtensionOrigin } from '../services/authService';
+import { signInWithGoogle, signInWithEmail, registerWithEmail, getExtensionOrigin, getOAuthRedirectURL } from '../services/authService';
 import {
   saveMediaLocalFirst,
   syncMediaToCloud,
@@ -965,34 +965,32 @@ const NotesModal = ({ isOpen, onClose }) => {
                   {vaultError && (
                     <div className="text-left text-[11px] text-amber-200 bg-amber-500/10 border border-amber-500/30 p-3 rounded-xl space-y-2">
                       <p>{vaultError}</p>
-                      {getExtensionOrigin() && (
-                        <div className="pt-1.5 border-t border-amber-500/20 space-y-1.5">
-                          <span className="text-[10px] text-gray-400 block font-medium">Add this to Firebase Authorized Domains:</span>
-                          <div className="flex items-center gap-1.5 bg-black/50 p-1.5 rounded border border-white/10 font-mono text-[10px] text-amber-300">
-                            <span className="truncate flex-1 select-all">{getExtensionOrigin()}</span>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                navigator.clipboard.writeText(getExtensionOrigin());
-                                setVaultError('Copied extension URI! Paste into Firebase Console > Authentication > Settings > Authorized Domains');
-                              }}
-                              className="p-1 hover:bg-white/10 rounded text-white shrink-0 cursor-pointer"
-                              title="Copy URI"
-                            >
-                              <Copy size={12} />
-                            </button>
-                          </div>
-                          <a
-                            href="https://console.firebase.google.com/project/landing-page-efde6/authentication/settings"
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center gap-1 text-[10px] text-blue-400 hover:text-blue-300 hover:underline pt-0.5"
+                      <div className="pt-1.5 border-t border-amber-500/20 space-y-1.5">
+                        <span className="text-[10px] text-gray-300 block font-medium">Google OAuth Redirect URI:</span>
+                        <div className="flex items-center gap-1.5 bg-black/50 p-1.5 rounded border border-white/10 font-mono text-[10px] text-amber-300">
+                          <span className="truncate flex-1 select-all">{getOAuthRedirectURL()}</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText(getOAuthRedirectURL());
+                              setVaultError('Copied OAuth Redirect URI! Add to Google Cloud Console Credentials.');
+                            }}
+                            className="p-1 hover:bg-white/10 rounded text-white shrink-0 cursor-pointer"
+                            title="Copy OAuth URI"
                           >
-                            <span>Open Firebase Console Settings</span>
-                            <ExternalLink size={10} />
-                          </a>
+                            <Copy size={12} />
+                          </button>
                         </div>
-                      )}
+                        <a
+                          href="https://console.cloud.google.com/apis/credentials?project=landing-page-efde6"
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 text-[10px] text-blue-400 hover:text-blue-300 hover:underline pt-0.5"
+                        >
+                          <span>Open Google Cloud Credentials</span>
+                          <ExternalLink size={10} />
+                        </a>
+                      </div>
                     </div>
                   )}
                 </div>

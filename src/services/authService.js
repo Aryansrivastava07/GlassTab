@@ -17,7 +17,23 @@ export const getExtensionOrigin = () => {
         return window.location.origin;
     }
     const id = typeof window !== 'undefined' ? window.chrome?.runtime?.id : null;
-    return id ? `chrome-extension://${id}` : 'chrome-extension://<your-extension-id>';
+    return id ? `chrome-extension://${id}` : 'chrome-extension://kcjeaiinohafmhkcnjkhpomplbfpkkgo';
+};
+
+/**
+ * Returns the exact OAuth redirect URL used by chrome.identity.launchWebAuthFlow
+ * (e.g. https://<extension-id>.chromiumapp.org/)
+ * Must be registered under Authorized redirect URIs in Google Cloud Console.
+ */
+export const getOAuthRedirectURL = () => {
+    try {
+        if (typeof chrome !== 'undefined' && chrome.identity?.getRedirectURL) {
+            return chrome.identity.getRedirectURL();
+        }
+    } catch {
+        // fallback
+    }
+    return 'https://kcjeaiinohafmhkcnjkhpomplbfpkkgo.chromiumapp.org/';
 };
 
 /**
@@ -30,19 +46,15 @@ export const getExtensionOrigin = () => {
  * 1. Go to https://console.cloud.google.com/apis/credentials?project=landing-page-efde6
  * 2. Find the OAuth 2.0 Web Client used by Firebase (name contains "Web client")
  * 3. Under "Authorized redirect URIs", add:
- *    https://agpepcpffpohajgcdofgmiegnmdffhmk.chromiumapp.org/
+ *    https://kcjeaiinohafmhkcnjkhpomplbfpkkgo.chromiumapp.org/
  * 4. Save
  */
 export const signInWithGoogle = async () => {
-    // ⚠️ Replace this with the OAuth 2.0 Web Client ID you created in Google Cloud Console
-    // Go to: https://console.cloud.google.com/apis/credentials?project=landing-page-efde6
-    // Create a new OAuth 2.0 Web Application client, add this redirect URI:
-    //   https://agpepcpffpohajgcdofgmiegnmdffhmk.chromiumapp.org/
-    // Then paste the new Client ID here:
+    // OAuth 2.0 Web Client ID in Google Cloud Console
     const CLIENT_ID = '69395256863-2bpuunju7jb9s030nng7dn069lj2edso.apps.googleusercontent.com';
 
-    const redirectUrl = chrome.identity.getRedirectURL();
-    console.log('[Auth] Redirect URL being used:', redirectUrl); // Open DevTools to verify this matches Google Cloud Console
+    const redirectUrl = getOAuthRedirectURL();
+    console.log('[Auth] Google OAuth Redirect URL:', redirectUrl);
 
     const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
     authUrl.searchParams.set('client_id', CLIENT_ID);
@@ -56,13 +68,21 @@ export const signInWithGoogle = async () => {
             { url: authUrl.toString(), interactive: true },
             async (responseUrl) => {
                 if (chrome.runtime.lastError) {
-                    const err = new Error(chrome.runtime.lastError.message || 'Sign-in was cancelled.');
+                    const rawMsg = chrome.runtime.lastError.message || 'Sign-in was cancelled.';
+                    console.warn('[Auth] launchWebAuthFlow error:', rawMsg, 'Redirect URL:', redirectUrl);
+                    const err = new Error(
+                        rawMsg.toLowerCase().includes('cancel') || rawMsg.toLowerCase().includes('did not approve')
+                            ? `Sign-in was cancelled. If Google blocked access with 'redirect_uri_mismatch', make sure ${redirectUrl} is authorized in Google Cloud Console.`
+                            : rawMsg
+                    );
                     err.code = 'auth/popup-closed-by-user';
+                    err.redirectUrl = redirectUrl;
                     return reject(err);
                 }
                 if (!responseUrl) {
-                    const err = new Error('Sign-in was cancelled or failed to open.');
+                    const err = new Error(`Sign-in was cancelled or failed to open. Check redirect URI: ${redirectUrl}`);
                     err.code = 'auth/popup-closed-by-user';
+                    err.redirectUrl = redirectUrl;
                     return reject(err);
                 }
 

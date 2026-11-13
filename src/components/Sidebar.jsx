@@ -58,7 +58,7 @@ const SYNC_STATUS_BADGE = {
 import { getGeminiApiKey, saveGeminiApiKey } from '../services/aiWidgetService';
 import { saveWallpaperMeta } from './WallpaperManager';
 import defaultLocalWallpaper from '../assets/walpaper2.jpg';
-import { signInWithGoogle, signInWithEmail, registerWithEmail, logout, getExtensionOrigin } from '../services/authService';
+import { signInWithGoogle, signInWithEmail, registerWithEmail, logout, getExtensionOrigin, getOAuthRedirectURL } from '../services/authService';
 
 const PRESET_WALLPAPERS = [
   { id: 'preset_default', name: 'Default Anime / Sky', url: defaultLocalWallpaper },
@@ -1499,20 +1499,48 @@ const Sidebar = ({
                           </form>
                         )}
                         {loginMessage && (
-                          <div className="text-[11px] text-amber-200 leading-relaxed bg-amber-500/10 p-3 rounded-xl border border-amber-500/30 space-y-2">
+                          <div className="text-[11px] text-amber-200 leading-relaxed bg-amber-500/10 p-3 rounded-xl border border-amber-500/30 space-y-2.5">
                             <p>{loginMessage}</p>
-                            {getExtensionOrigin() && (
-                              <div className="pt-1.5 border-t border-amber-500/20 space-y-1.5">
-                                <span className="text-[10px] text-gray-400 block font-medium">Whitelist URI for Firebase Console:</span>
-                                <div className="flex items-center gap-1.5 bg-black/50 p-1.5 rounded border border-white/10 font-mono text-[10px] text-amber-300">
+                            <div className="pt-2 border-t border-amber-500/20 space-y-2">
+                              <div>
+                                <span className="text-[10px] text-gray-300 block font-medium">Google OAuth Redirect URI:</span>
+                                <div className="flex items-center gap-1.5 bg-black/50 p-1.5 rounded border border-white/10 font-mono text-[10px] text-amber-300 mt-1">
+                                  <span className="truncate flex-1 select-all">{getOAuthRedirectURL()}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(getOAuthRedirectURL());
+                                      showNotice('Redirect URI copied to clipboard!');
+                                    }}
+                                    className="p-1 hover:bg-white/10 rounded text-white shrink-0 cursor-pointer"
+                                    title="Copy OAuth Redirect URI"
+                                  >
+                                    <Copy size={12} />
+                                  </button>
+                                </div>
+                                <a
+                                  href="https://console.cloud.google.com/apis/credentials?project=landing-page-efde6"
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center gap-1 text-[10px] text-blue-400 hover:text-blue-300 hover:underline pt-0.5"
+                                >
+                                  <span>Add to Google Cloud Console Credentials</span>
+                                  <ExternalLink size={10} />
+                                </a>
+                              </div>
+
+                              <div className="pt-1 border-t border-white/5">
+                                <span className="text-[10px] text-gray-400 block font-medium">Firebase Authorized Domain:</span>
+                                <div className="flex items-center gap-1.5 bg-black/50 p-1.5 rounded border border-white/10 font-mono text-[10px] text-gray-300 mt-1">
                                   <span className="truncate flex-1 select-all">{getExtensionOrigin()}</span>
                                   <button
+                                    type="button"
                                     onClick={() => {
                                       navigator.clipboard.writeText(getExtensionOrigin());
                                       showNotice('Origin copied to clipboard!');
                                     }}
                                     className="p-1 hover:bg-white/10 rounded text-white shrink-0 cursor-pointer"
-                                    title="Copy URI"
+                                    title="Copy Origin"
                                   >
                                     <Copy size={12} />
                                   </button>
@@ -1527,7 +1555,7 @@ const Sidebar = ({
                                   <ExternalLink size={10} />
                                 </a>
                               </div>
-                            )}
+                            </div>
                           </div>
                         )}
                       </div>

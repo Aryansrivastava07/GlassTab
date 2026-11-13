@@ -38,7 +38,7 @@ import {
 } from '../services/aiChatService';
 import { getGeminiApiKey, saveGeminiApiKey } from '../services/aiWidgetService';
 import { useAuth } from '../context/AuthContext';
-import { signInWithGoogle } from '../services/authService';
+import { signInWithGoogle, signInWithEmail, registerWithEmail } from '../services/authService';
 
 // Lightweight Zero-Dependency Markdown Formatter with Copyable Code Blocks
 const FormattedMessage = ({ text }) => {
@@ -209,17 +209,40 @@ export const GlassAIStudio = ({ onScrollToDashboard }) => {
     return () => unsubscribe();
   }, [effectiveUid]);
 
+  const [showEmailAuth, setShowEmailAuth] = useState(false);
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [emailInput, setEmailInput] = useState('');
+  const [passwordInput, setPasswordInput] = useState('');
+  const [isEmailSubmitting, setIsEmailSubmitting] = useState(false);
+
   const handleGoogleSignIn = async () => {
     setIsSigningIn(true);
     setSignInError('');
     try {
       await signInWithGoogle();
     } catch (err) {
-      if (err?.code !== 'auth/popup-closed-by-user') {
-        setSignInError(err?.message || 'Google sign-in failed. Please try again.');
-      }
+      setSignInError(err?.message || 'Google sign-in failed. Please try again or use Email sign-in.');
     } finally {
       setIsSigningIn(false);
+    }
+  };
+
+  const handleEmailAuthSubmit = async (e) => {
+    e.preventDefault();
+    setIsEmailSubmitting(true);
+    setSignInError('');
+    try {
+      if (isRegistering) {
+        await registerWithEmail(emailInput, passwordInput);
+      } else {
+        await signInWithEmail(emailInput, passwordInput);
+      }
+      setEmailInput('');
+      setPasswordInput('');
+    } catch (err) {
+      setSignInError(err?.message || 'Authentication failed. Please check your credentials.');
+    } finally {
+      setIsEmailSubmitting(false);
     }
   };
 
@@ -726,12 +749,12 @@ export const GlassAIStudio = ({ onScrollToDashboard }) => {
                     Sign in to Unlock AI Studio
                   </h3>
                   <p className="text-xs text-gray-300 leading-relaxed max-w-sm mx-auto">
-                    Sign in with Google to get <strong className="text-sky-300">10 free AI chats</strong> powered by Gemini 2.5 Flash with live Google Search. Your trial is securely synced to your account across devices.
+                    Sign in to get <strong className="text-sky-300">10 free AI chats</strong> powered by Gemini 2.5 Flash with live Google Search. Your trial is securely synced to your account across devices.
                   </p>
                 </div>
 
                 {signInError && (
-                  <div className="p-2.5 rounded-xl bg-red-500/15 border border-red-500/30 text-red-300 text-xs text-left">
+                  <div className="p-2.5 rounded-xl bg-red-500/15 border border-red-500/30 text-red-300 text-xs text-left leading-relaxed">
                     {signInError}
                   </div>
                 )}
@@ -763,6 +786,53 @@ export const GlassAIStudio = ({ onScrollToDashboard }) => {
                     </svg>
                     <span>{isSigningIn ? 'Connecting to Google...' : 'Continue with Google'}</span>
                   </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowEmailAuth(!showEmailAuth)}
+                    className="w-full py-1 text-xs text-gray-400 hover:text-white transition cursor-pointer text-center"
+                  >
+                    {showEmailAuth ? 'Hide email sign-in' : 'Or sign in / register with Email'}
+                  </button>
+
+                  {showEmailAuth && (
+                    <form onSubmit={handleEmailAuthSubmit} className="p-3 bg-white/5 border border-white/10 rounded-xl space-y-2 text-left animate-fadeIn">
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="font-semibold text-white">{isRegistering ? 'Create Account' : 'Email Sign In'}</span>
+                        <button
+                          type="button"
+                          onClick={() => setIsRegistering(!isRegistering)}
+                          className="text-sky-400 hover:text-sky-300 text-[11px] underline cursor-pointer"
+                        >
+                          {isRegistering ? 'Have an account? Sign In' : 'Sign Up'}
+                        </button>
+                      </div>
+                      <input
+                        type="email"
+                        required
+                        placeholder="Email address"
+                        value={emailInput}
+                        onChange={(e) => setEmailInput(e.target.value)}
+                        className="w-full px-3 py-1.5 bg-black/40 border border-white/15 rounded-lg text-xs text-white placeholder-gray-500 focus:outline-none focus:border-sky-400"
+                      />
+                      <input
+                        type="password"
+                        required
+                        minLength={6}
+                        placeholder="Password (min 6 characters)"
+                        value={passwordInput}
+                        onChange={(e) => setPasswordInput(e.target.value)}
+                        className="w-full px-3 py-1.5 bg-black/40 border border-white/15 rounded-lg text-xs text-white placeholder-gray-500 focus:outline-none focus:border-sky-400"
+                      />
+                      <button
+                        type="submit"
+                        disabled={isEmailSubmitting}
+                        className="w-full py-2 bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-500 hover:to-indigo-500 text-white rounded-lg text-xs font-semibold shadow transition cursor-pointer disabled:opacity-50"
+                      >
+                        {isEmailSubmitting ? 'Please wait...' : (isRegistering ? 'Create Account & Unlock' : 'Sign In & Unlock')}
+                      </button>
+                    </form>
+                  )}
 
                   <button
                     type="button"

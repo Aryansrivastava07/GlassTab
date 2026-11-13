@@ -1,8 +1,19 @@
 // Import the functions you need from the SDKs you need
 import { initializeApp } from "firebase/app";
-import { getAnalytics } from "firebase/analytics";
-import { getAuth, GoogleAuthProvider } from "firebase/auth";
+import { getAnalytics, isSupported } from "firebase/analytics";
+import {
+  getAuth,
+  initializeAuth,
+  GoogleAuthProvider,
+  indexedDBLocalPersistence,
+  browserLocalPersistence,
+  inMemoryPersistence,
+  signInWithCredential
+} from "firebase/auth";
 import { getFirestore, enableIndexedDbPersistence } from "firebase/firestore";
+import { getStorage } from "firebase/storage";
+
+export { signInWithCredential };
 // TODO: Add SDKs for Firebase products that you want to use
 // https://firebase.google.com/docs/web/setup#available-libraries
 
@@ -19,27 +30,56 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
+export const app = initializeApp(firebaseConfig);
 
-// Initialize Firebase Authentication and get a reference to the service
-export const auth = getAuth(app);
+// Initialize Analytics safely (avoids crashing in extension chrome-extension:// origins)
+export let analytics = null;
+isSupported().then((supported) => {
+  if (supported) {
+    try {
+      analytics = getAnalytics(app);
+    } catch {
+      // Ignored in extension context
+    }
+  }
+}).catch(() => {});
+
+// Initialize Firebase Authentication with fallback persistence (IndexedDB -> LocalStorage -> Memory)
+let authInstance;
+try {
+  authInstance = initializeAuth(app, {
+    persistence: [indexedDBLocalPersistence, browserLocalPersistence, inMemoryPersistence]
+  });
+} catch {
+  authInstance = getAuth(app);
+}
+export const auth = authInstance;
 export const googleProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({
+  prompt: 'select_account'
+});
 
 // Initialize Firestore Database with offline persistence
 export const db = getFirestore(app);
 
-// Enable offline persistence
+// Initialize Firebase Storage (used for wallpapers & vault media when bucket is enabled)
+export let storage = null;
+try {
+  storage = getStorage(app);
+} catch (err) {
+  console.warn("Firebase Storage init note:", err.message || err);
+}
+
+// Enable offline persistence safely
 enableIndexedDbPersistence(db)
   .then(() => {
     console.log("✅ Firestore offline persistence enabled");
   })
   .catch((err) => {
     if (err.code === 'failed-precondition') {
-      console.warn("⚠️ Multiple tabs open, persistence can only be enabled in one tab at a time.");
-    } else if (err.code === 'unimplemented') {
-      console.warn("⚠️ The current browser does not support all of the features required to enable persistence.");
+      console.log("ℹ️ Multiple tabs open, offline persistence shared across sessions.");
     } else {
-      console.error("❌ Error enabling offline persistence:", err);
+      console.warn("ℹ️ Offline persistence note:", err.message || err);
     }
   });
+

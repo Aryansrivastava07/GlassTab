@@ -37,7 +37,7 @@
 ### 🧩 Freeform Draggable & Resizable Widgets
 - **Live Analog Clock:** Fluid ticking second-hand with glass face reflections.
 - **Live Weather Widget:** Instant auto-location or worldwide city search with temperature, humidity, wind, and forecast.
-- **Notes & Scratchpad:** Fast floating note cards or full markdown modal vault.
+- **Notes & Scratchpad:** Fast floating note cards or full markdown vault.
 - **Sandboxed Custom Widgets:** Safely execute custom HTML/CSS/JS widgets inside an isolated iframe sandbox (`widget-sandbox.html`) via a secure `postMessage` bridge.
 - **Community Widget Store:** Browse and install community widgets or publish your own directly to Cloud Firestore.
 - **Persistent Grid:** Freeform drag-and-drop and resize coordinates persist across browser restarts.
@@ -252,5 +252,6 @@ Distributed under the **MIT License**. See `LICENSE` for more information.
 <p align="center">
   Built with ❤️ by Aryan Srivastava for a cleaner, faster, and more beautiful browsing experience.
 </p>
-#   G l a s s T a b  
+#   G l a s s T a b 
+ 
  

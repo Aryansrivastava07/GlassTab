@@ -2,14 +2,10 @@
   box-sizing: border-box;
 }
 
-body {
-  background: rgba(0, 0, 0);
-  color-scheme: dark light;
-}
 
 :root {
-  --clock-diameter: 150px;
-  --clock-size: clamp(100px, var(--clock-diameter), 600px);
+  --clock-diameter: 130px;
+  --clock-size: clamp(90px, var(--clock-diameter), 300px);
 }
 
 .clock {
@@ -17,31 +13,31 @@ body {
   width: var(--clock-size);
   border-radius: 50%;
   position: relative;
-  background-color: rgba(10, 10, 10, 0.338);
-  /* background-colorgb(1, 0, 0)46); */
-  /* border: 1px solid rgba(255, 255, 255, 0.377); */
-  /* position: absolute; */
-  /* top: 0; */
-  /* right: 0; */
-  /* overflow: hidden; */
+  background-color: var(--glass-widgets-bg, rgba(0, 0, 0, 0.4));
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(var(--glass-widgets-blur, 3px));
+  -webkit-backdrop-filter: blur(var(--glass-widgets-blur, 3px));
 }
 .clock::before {
   content: "";
   position: absolute;
   height: 100%;
   width: 100%;
-  background: url(https://www.pngmart.com/files/23/Clock-Face-PNG-Transparent.png);
+  background: url(../assets/clock-face.png);
   background-size: 111%;
   background-position: center;
   border-radius: 50%;
-  filter: invert(1);
+  filter: var(--clock-face-filter, invert(1));
+  opacity: 0.85;
 }
+
 .clock::after {
   content: "12";
   position: absolute;
   top: 15%;
   left: 50%;
-  color: rgba(255, 255, 255, 0.692);
+  color: var(--clock-hand-color, rgba(255, 255, 255, 0.692));
   transform: translate(-50%, -50%);
   font-size: calc(var(--clock-diameter) / 7);
 }
@@ -158,7 +154,7 @@ body {
 #minute {
   width: calc(var(--clock-diameter) / 60);
   height: calc(var(--clock-diameter) / 2.5);
-  background-color: rgb(255, 252, 252);
+  background-color: var(--clock-hand-color, rgb(255, 252, 252));
   animation: minute 3600s linear infinite;
   --mn-deg-start: 180deg;
   --mn-deg-end: 540deg;
@@ -185,7 +181,7 @@ body {
 #hour {
   width: calc(var(--clock-diameter) / 40);
   height: calc(var(--clock-diameter) / 4);
-  background-color: rgb(255, 252, 252);
+  background-color: var(--clock-hand-color, rgb(255, 252, 252));
   animation: hour 43200s linear infinite;
   --hr-deg-start: 180deg;
   --hr-deg-end: 540deg;

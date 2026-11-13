@@ -1,7 +1,8 @@
 {
-  "name": "vite-project",
+  "name": "glasstab-dashboard",
   "private": true,
-  "version": "0.0.0",
+  "version": "2.0.2",
+  "description": "Futuristic Glassmorphic AI New Tab Dashboard Chrome Extension powered by Gemini 3.8 Flash, draggable widgets, and offline-first persistence.",
   "type": "module",
   "scripts": {
     "dev": "vite",

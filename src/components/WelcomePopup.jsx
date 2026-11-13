@@ -144,7 +144,9 @@ const WelcomePopup = () => {
           left: 0;
           right: 0;
           bottom: 0;
-          background: rgba(0, 0, 0, 0.8);
+          background: rgba(0, 0, 0, 0.7);
+          backdrop-filter: blur(4px);
+          -webkit-backdrop-filter: blur(4px);
           display: flex;
           align-items: center;
           justify-content: center;
@@ -153,14 +155,16 @@ const WelcomePopup = () => {
         }
 
         .popup {
-          background: white;
+          background: rgba(24, 28, 38, 0.95);
+          border: 1px solid rgba(255, 255, 255, 0.15);
           border-radius: 20px;
           max-width: 600px;
           width: 100%;
           max-height: 90vh;
           overflow-y: auto;
           position: relative;
-          box-shadow: 0 25px 50px rgba(0, 0, 0, 0.25);
+          box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5);
+          color: white;
         }
 
         .closeBtn {
@@ -171,38 +175,40 @@ const WelcomePopup = () => {
         }
 
         .closeBtn button {
-          background: #f3f4f6;
-          border: none;
+          background: rgba(255, 255, 255, 0.1);
+          color: white;
+          border: 1px solid rgba(255, 255, 255, 0.15);
           border-radius: 50%;
-          width: 40px;
-          height: 40px;
+          width: 36px;
+          height: 36px;
           display: flex;
           align-items: center;
           justify-content: center;
           cursor: pointer;
-          transition: background 0.2s;
+          transition: all 0.2s;
         }
 
         .closeBtn button:hover {
-          background: #e5e7eb;
+          background: rgba(255, 255, 255, 0.2);
         }
 
         h1 {
           text-align: center;
-          color: #1f2937;
-          margin: 2rem 2rem 1rem;
-          font-size: 2rem;
+          color: #ffffff;
+          margin: 2rem 2rem 0.5rem;
+          font-size: 1.8rem;
+          font-weight: 700;
         }
 
         .popupHeading {
           text-align: center;
-          color: #6b7280;
+          color: #94a3b8;
           margin: 0 2rem 2rem;
-          font-size: 1.1rem;
+          font-size: 1.05rem;
         }
 
         .textHighlight {
-          color: #3b82f6;
+          color: #60a5fa;
           font-weight: 600;
         }
 
@@ -223,36 +229,39 @@ const WelcomePopup = () => {
         }
 
         .featureContent h2 {
-          color: #1f2937;
+          color: #f1f5f9;
           margin-bottom: 0.5rem;
           font-size: 1.25rem;
+          font-weight: 600;
         }
 
         .featureContent p {
-          color: #6b7280;
+          color: #94a3b8;
           line-height: 1.6;
           margin-bottom: 1rem;
         }
 
         .featureDetails {
-          background: #f9fafb;
-          border-radius: 8px;
+          background: rgba(255, 255, 255, 0.05);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          border-radius: 12px;
           padding: 1rem;
         }
 
         .detailItem {
           margin: 0.5rem 0;
-          color: #4b5563;
+          color: #e2e8f0;
           font-size: 0.9rem;
         }
 
         .kbd {
-          background: #e5e7eb;
-          border: 1px solid #d1d5db;
-          border-radius: 4px;
+          background: rgba(255, 255, 255, 0.12);
+          border: 1px solid rgba(255, 255, 255, 0.2);
+          border-radius: 6px;
           padding: 0.25rem 0.5rem;
           font-family: monospace;
           font-size: 0.8rem;
+          color: #93c5fd;
           margin-right: 0.5rem;
         }
 
@@ -269,13 +278,14 @@ const WelcomePopup = () => {
           width: 8px;
           height: 8px;
           border-radius: 50%;
-          background: #d1d5db;
+          background: rgba(255, 255, 255, 0.25);
           cursor: pointer;
-          transition: background 0.2s;
+          transition: all 0.2s;
         }
 
         .indicatorHighlight {
           background: #3b82f6;
+          transform: scale(1.2);
         }
 
         .buttons {
@@ -288,28 +298,29 @@ const WelcomePopup = () => {
           flex: 1;
           padding: 0.75rem 1.5rem;
           border: none;
-          border-radius: 8px;
-          font-weight: 500;
+          border-radius: 10px;
+          font-weight: 600;
           cursor: pointer;
-          transition: background 0.2s;
+          transition: all 0.2s;
         }
 
         .btnClose {
-          background: #6b7280;
+          background: rgba(255, 255, 255, 0.1);
+          border: 1px solid rgba(255, 255, 255, 0.15);
           color: white;
         }
 
         .btnClose:hover {
-          background: #4b5563;
+          background: rgba(255, 255, 255, 0.18);
         }
 
         .btnNext {
-          background: #3b82f6;
+          background: #2563eb;
           color: white;
         }
 
         .btnNext:hover {
-          background: #2563eb;
+          background: #1d4ed8;
         }
 
         @media (max-width: 640px) {

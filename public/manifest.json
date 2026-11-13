@@ -1,0 +1,35 @@
+{
+  "manifest_version": 3,
+  "name": "GlassTab - Custom New Tab Dashboard",
+  "short_name": "GlassTab",
+  "version": "2.0.2",
+  "description": "Glassmorphism New Tab dashboard with weather, clock, fast autocomplete, speed dials, vault notes, and custom widgets.",
+  "chrome_url_overrides": {
+    "newtab": "index.html"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": [
+    "storage",
+    "identity"
+  ],
+  "host_permissions": [
+    "https://*/*",
+    "http://*/*"
+  ],
+  "sandbox": {
+    "pages": [
+      "widget-sandbox.html"
+    ]
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; frame-src 'self' https://*.firebaseapp.com https://*.firebase.com https://accounts.google.com;",
+    "sandbox": "sandbox allow-scripts allow-forms allow-popups allow-modals; script-src 'self' 'unsafe-inline' 'unsafe-eval';"
+  },
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  }
+}

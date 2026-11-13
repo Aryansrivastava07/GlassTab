@@ -89,6 +89,9 @@ const NotesWidget = () => {
   const addNote = () => {
     if (!newNote.title.trim() || !newNote.content.trim()) return;
 
+    const themeColors = ['#38bdf8', '#34d399', '#a78bfa', '#fbbf24', '#fb7185', '#94a3b8'];
+    const chosenColor = themeColors[Math.floor(Math.random() * themeColors.length)];
+
     const updatedNotes = [
       ...notes,
       {
@@ -96,7 +99,7 @@ const NotesWidget = () => {
         title: newNote.title,
         content: newNote.content,
         createdAt: new Date().toISOString(),
-        color: `hsl(${Math.random() * 360}, 70%, 95%)`
+        color: chosenColor
       }
     ];
 
@@ -273,7 +276,7 @@ const NotesWidget = () => {
                   />
                   <button
                     onClick={addNote}
-                    className="w-full py-1 bg-purple-500/80 hover:bg-purple-500 text-white rounded text-sm transition-colors"
+                    className="w-full py-1.5 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white rounded-lg text-xs font-semibold transition-all cursor-pointer shadow-sm"
                   >
                     Add Note
                   </button>
@@ -285,17 +288,20 @@ const NotesWidget = () => {
                 {notes.map(note => (
                   <div
                     key={note.id}
-                    className="p-2 rounded-lg border border-white/10 hover:border-white/20 transition-all duration-200 group"
-                    style={{ backgroundColor: note.color || 'rgba(255,255,255,0.05)' }}
+                    className="p-3 rounded-xl border border-white/10 hover:border-white/20 transition-all duration-200 group bg-slate-900/80 backdrop-blur-md shadow-sm"
+                    style={{
+                      borderLeftWidth: '3.5px',
+                      borderLeftColor: note.color || '#38bdf8',
+                    }}
                   >
                     <div className="flex items-start justify-between">
                       <div className="flex-1 min-w-0">
-                        <h4 className="text-white font-medium text-sm truncate">{note.title}</h4>
-                        <p className="text-white/70 text-xs mt-1 line-clamp-2">{note.content}</p>
+                        <h4 className="text-white font-semibold text-xs truncate">{note.title}</h4>
+                        <p className="text-slate-200/90 text-xs mt-1 line-clamp-2 leading-relaxed">{note.content}</p>
                       </div>
                       <button
                         onClick={() => deleteNote(note.id)}
-                        className="opacity-0 group-hover:opacity-100 p-1 text-red-400 hover:bg-red-500/20 rounded transition-all shrink-0 ml-2"
+                        className="opacity-0 group-hover:opacity-100 p-1 text-white/40 hover:text-red-400 hover:bg-red-500/15 rounded-lg transition-all shrink-0 ml-2 cursor-pointer"
                       >
                         <Trash2 size={12} />
                       </button>

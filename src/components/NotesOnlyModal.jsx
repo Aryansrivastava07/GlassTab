@@ -69,16 +69,7 @@ const NotesOnlyModal = ({ isOpen, onClose }) => {
   };
 
   const getRandomColor = () => {
-    const colors = [
-      '#fff9c4', // Light yellow
-      '#ffccbc', // Light orange
-      '#f8bbd0', // Light pink
-      '#e1bee7', // Light purple
-      '#c5cae9', // Light indigo
-      '#bbdefb', // Light blue
-      '#b2dfdb', // Light teal
-      '#c8e6c9', // Light green
-    ];
+    const colors = ['#38bdf8', '#34d399', '#a78bfa', '#fbbf24', '#fb7185', '#94a3b8'];
     return colors[Math.floor(Math.random() * colors.length)];
   };
 
@@ -145,30 +136,29 @@ const NotesOnlyModal = ({ isOpen, onClose }) => {
                   className="relative group"
                   style={{ minHeight: '200px' }}
                 >
-                  {/* Sticky Note */}
+                  {/* Modern Glass Note */}
                   <div
-                    className="w-full h-full p-3 rounded shadow-lg border-2 border-gray-300 transition-all duration-200 hover:shadow-xl"
-                    style={{ backgroundColor: note.color }}
+                    className="w-full h-full p-4 rounded-xl shadow-lg border border-white/10 transition-all duration-200 hover:shadow-xl bg-slate-900/90 backdrop-blur-md relative overflow-hidden"
+                    style={{
+                      borderLeftWidth: '4px',
+                      borderLeftColor: note.color || '#38bdf8',
+                      backgroundImage: `linear-gradient(135deg, ${note.color ? `${note.color}15` : 'rgba(56, 189, 248, 0.1)'} 0%, rgba(15, 23, 42, 0.7) 100%)`
+                    }}
                   >
-                    {/* Pin */}
-                    <div className="absolute top-2 left-2">
-                      <MapPin size={16} className="text-gray-600" />
-                    </div>
-
                     {/* Delete Button */}
                     <button
                       onClick={() => deleteNote(note.id)}
-                      className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 p-1 bg-red-500 hover:bg-red-600 text-white rounded transition-all"
+                      className="absolute top-2.5 right-2.5 opacity-0 group-hover:opacity-100 p-1.5 text-white/50 hover:text-red-400 hover:bg-red-500/15 rounded-lg transition-all cursor-pointer"
                     >
                       <Trash2 size={14} />
                     </button>
 
                     {/* Content */}
-                    <div className="pt-6">
-                      <h4 className="font-bold text-gray-800 text-sm mb-2 pr-6">
+                    <div>
+                      <h4 className="font-semibold text-white text-sm mb-2 pr-6">
                         {note.title}
                       </h4>
-                      <p className="text-gray-700 text-xs whitespace-pre-wrap">
+                      <p className="text-slate-200/90 text-xs whitespace-pre-wrap leading-relaxed">
                         {note.content}
                       </p>
                     </div>

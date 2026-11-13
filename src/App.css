@@ -1,20 +1,31 @@
 @import "tailwindcss";
 
-/* Dark theme with glass morphism */
+/* Base styles */
 body {
-  background: linear-gradient(135deg, #0f0f0f 0%, #1a1a1a 50%, #0f0f0f 100%);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background-color: #0d0f14;
+  color: #ffffff;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  overflow-x: hidden;
+}
+
+/* Hide scrollbar for clean snap scrolling */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
 
 /* Performance optimizations */
 .animate-fadeIn {
-  animation: fadeIn 0.5s ease-in-out;
+  animation: fadeIn 0.3s ease-out;
 }
 
 @keyframes fadeIn {
   from {
     opacity: 0;
-    transform: translateY(10px);
+    transform: translateY(6px);
   }
   to {
     opacity: 1;
@@ -24,15 +35,15 @@ body {
 
 /* Skeleton loading animations */
 .animate-pulse {
-  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  animation: pulse 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
 @keyframes pulse {
   0%, 100% {
-    opacity: 1;
+    opacity: 0.8;
   }
   50% {
-    opacity: 0.5;
+    opacity: 0.3;
   }
 }
 
@@ -42,113 +53,102 @@ body {
   transform: translateZ(0);
 }
 
-/* Glass morphism effect */
+/* Clean, crisp glassmorphism with subtle blur (no muddy 16px blur) */
 .glass-morphism {
-  background: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+  background: rgba(18, 20, 28, 0.55);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 4px 20px 0 rgba(0, 0, 0, 0.35);
 }
 
 /* Dark glass morphism for widgets */
 .dark-glass {
-  background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+  background: rgba(10, 12, 18, 0.55);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 4px 24px 0 rgba(0, 0, 0, 0.4);
 }
 
 /* Search bar styling */
 .search-container {
-  background: rgba(255, 255, 255, 0.5);
-  backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 4px 24px 0 rgba(0, 0, 0, 0.3);
-  transition: all 0.3s ease;
+  background: var(--glass-search-bg, rgba(0, 0, 0, 0.55));
+  backdrop-filter: blur(var(--glass-search-blur, 12px));
+  -webkit-backdrop-filter: blur(var(--glass-search-blur, 12px));
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: 0 4px 24px 0 rgba(0, 0, 0, 0.45);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
 }
 
 .search-container:hover {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.2);
-  box-shadow: 0 6px 32px 0 rgba(0, 0, 0, 0.4);
+  background: rgba(0, 0, 0, 0.65);
+  border-color: rgba(255, 255, 255, 0.3);
+  box-shadow: 0 6px 28px 0 rgba(0, 0, 0, 0.55);
 }
 
 .search-container:focus-within {
-  background: rgba(255, 255, 255, 0.15);
-  border-color: rgba(255, 255, 255, 0.3);
-  box-shadow: 0 8px 40px 0 rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.75);
+  border-color: rgba(147, 197, 253, 0.6);
+  box-shadow: 0 0 25px rgba(59, 130, 246, 0.25);
+}
+
+.search-container input {
+  color: var(--glass-search-text, #ffffff);
+  text-shadow: var(--glass-search-text-shadow, none);
+}
+
+.search-container input::placeholder {
+  color: var(--glass-search-text-muted, rgba(255, 255, 255, 0.5));
 }
 
 /* Speed dial styling */
 .speed-dial-item {
-  background: rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 4px 16px 0 rgba(0, 0, 0, 0.3);
-  transition: all 0.3s ease;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 4px 16px 0 rgba(0, 0, 0, 0.35);
+  transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
 }
 
 .speed-dial-item:hover {
-  background: rgba(255, 255, 255, 0.15);
-  border-color: rgba(255, 255, 255, 0.2);
-  box-shadow: 0 8px 24px 0 rgba(0, 0, 0, 0.4);
-  transform: translateY(-2px);
+  background: rgba(0, 0, 0, 0.65);
+  border-color: rgba(255, 255, 255, 0.3);
+  transform: translateY(-3px) scale(1.02);
 }
 
 /* Weather widget styling */
 .weather-widget {
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+  background: var(--glass-widgets-bg, rgba(0, 0, 0, 0.45));
+  backdrop-filter: blur(var(--glass-widgets-blur, 10px));
+  -webkit-backdrop-filter: blur(var(--glass-widgets-blur, 10px));
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 4px 20px 0 rgba(0, 0, 0, 0.35);
   border-radius: 16px;
-}
-
-/* Clock widget styling */
-.clock-widget {
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
-  border-radius: 50%;
-}
-
-/* Smooth transitions for all interactive elements */
-* {
-  transition: opacity 0.2s ease-in-out, transform 0.2s ease-in-out;
-}
-
-/* Reduce motion for users who prefer it */
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
+  color: var(--glass-widgets-text, #ffffff);
+  text-shadow: var(--glass-widgets-text-shadow, none);
 }
 
 /* Custom scrollbar */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(0, 0, 0, 0.2);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.4);
 }
 
-/* Hide scrollbar for snap containers */
 .scrollbar-hide {
   -ms-overflow-style: none;
   scrollbar-width: none;
@@ -158,20 +158,49 @@ body {
   display: none;
 }
 
-/* Text styles */
-.text-glow {
-  text-shadow: 0 0 20px rgba(255, 255, 255, 0.5);
+/* =========================================================================
+   LITE MODE FOR LOW-SPEC COMPUTERS (0% BLUR, 60 FPS, LOW GPU/CPU OVERHEAD)
+   ========================================================================= */
+
+html.lite-mode {
+  --glass-search-blur: 0px !important;
+  --glass-widgets-blur: 0px !important;
+  --glass-favorites-blur: 0px !important;
+  --glass-dials-blur: 0px !important;
+  --glass-notes-blur: 0px !important;
+  --glass-navbar-blur: 0px !important;
+  --glass-sidebar-blur: 0px !important;
+  --glass-search-text-shadow: none !important;
+  --glass-widgets-text-shadow: none !important;
 }
 
-/* Responsive adjustments */
-@media (max-width: 768px) {
-  .weather-widget {
-    border-radius: 12px;
-  }
-  
-  .clock-widget {
-    border-radius: 50%;
-    width: 120px;
-    height: 120px;
-  }
+html.lite-mode *,
+html.lite-mode *::before,
+html.lite-mode *::after {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  text-shadow: none !important;
+}
+
+/* Replace expensive transparent blur glass with fast, clean solid/semi-solid surfaces */
+html.lite-mode .glass-morphism,
+html.lite-mode .dark-glass,
+html.lite-mode .search-container,
+html.lite-mode .speed-dial-item,
+html.lite-mode .weather-widget {
+  background: rgba(14, 18, 26, 0.95) !important;
+  border-color: rgba(255, 255, 255, 0.16) !important;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45) !important;
+}
+
+/* Eliminate expensive infinite pulse animations on low-spec GPUs */
+html.lite-mode .animate-pulse,
+html.lite-mode .animate-spin-slow,
+html.lite-mode .animate-bounce {
+  animation: none !important;
+}
+
+/* Tame all transitions to avoid stuttering frames on budget hardware */
+html.lite-mode * {
+  transition-duration: 0.15s !important;
 }

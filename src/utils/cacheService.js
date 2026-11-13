@@ -19,22 +19,16 @@ const CACHE_EXPIRY = {
     WALLPAPER: 24 * 60 * 60 * 1000,   // 24 hours
 };
 
-// Get cached data with expiration check
-export const getCachedData = (key, expiryTime) => {
+// Get cached data (Local-First: never auto-delete local DB entries on expiry)
+export const getCachedData = (key) => {
     try {
         const cachedItem = localStorage.getItem(key);
         if (!cachedItem) return null;
 
-        const { data, timestamp, version } = JSON.parse(cachedItem);
+        const { data, version } = JSON.parse(cachedItem);
 
         // Check version compatibility
         if (version !== CACHE_VERSION) {
-            localStorage.removeItem(key);
-            return null;
-        }
-
-        // Check expiration
-        if (Date.now() - timestamp > expiryTime) {
             localStorage.removeItem(key);
             return null;
         }

@@ -1,0 +1,31 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // User personal data & cloud sync
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+
+      // Wallpaper and media binaries
+      match /media/{mediaId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+    }
+
+    // Community Widget Store
+    match /widgetStore/{widgetId} {
+      // Anyone can browse and load community widgets
+      allow read: if true;
+
+      // Signed-in users can publish new widgets
+      allow create: if request.auth != null;
+
+      // Creators can update their widgets, or users can increment install count
+      allow update: if request.auth != null || 
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['installs']);
+
+      // Only the author can delete their published widget
+      allow delete: if request.auth != null && resource.data.authorUid == request.auth.uid;
+    }
+  }
+}

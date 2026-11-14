@@ -3,7 +3,6 @@
   "name": "GlassTab - Custom New Tab Dashboard",
   "short_name": "GlassTab",
   "version": "2.0.2",
-  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAu2gZHigZlWl7iJBoGO9eCuWOBkycocZSEw+3N2PxAv8g5agyLC9f7R4ya1XjFaLlCjFQaZFa0S3WDyE3ARCTFsLXeYQFfpKEC2OcXuKo24x8mxzJGlhA5j8XUbE5I2acauelY6wRKG5i5Ufdl7qp0obMoQxgNLomM2LkIgI+1cIZk2Odeq9mgT8fARqnQ7DXFm3Nok1GmUCaqMji52/aAh+SWVoXap1GCCPzyqv1y5fo41Ta1zLEY9pnNds1jOOnSzEX2Sl11/1Kggf2llDfy6wal4WKbI6t5/dcgMOC5fHAPrvxPAMisiMyzL24Gc3YPCJZRqQ7diC/2p+fjFo4fQIDAQAB",
   "description": "Glassmorphism New Tab dashboard with weather, clock, fast autocomplete, speed dials, vault notes, and custom widgets.",
   "chrome_url_overrides": {
     "newtab": "index.html"

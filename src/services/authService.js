@@ -17,7 +17,7 @@ export const getExtensionOrigin = () => {
         return window.location.origin;
     }
     const id = typeof window !== 'undefined' ? window.chrome?.runtime?.id : null;
-    return id ? `chrome-extension://${id}` : 'chrome-extension://kcjeaiinohafmhkcnjkhpomplbfpkkgo';
+    return id ? `chrome-extension://${id}` : 'chrome-extension://agpepcpffpohajgcdofgmiegnmdffhmk';
 };
 
 /**
@@ -33,7 +33,7 @@ export const getOAuthRedirectURL = () => {
     } catch {
         // fallback
     }
-    return 'https://kcjeaiinohafmhkcnjkhpomplbfpkkgo.chromiumapp.org/';
+    return 'https://agpepcpffpohajgcdofgmiegnmdffhmk.chromiumapp.org/';
 };
 
 /**

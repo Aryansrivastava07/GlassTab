@@ -284,7 +284,16 @@ const SearchBar = ({ isDashboardActive = true }) => {
   const hasAttemptedInitialFocusRef = useRef(false);
   useEffect(() => {
     if (!isDashboardActive || hasAttemptedInitialFocusRef.current) return;
+    if (features.autoFocusSearch === false) return;
     hasAttemptedInitialFocusRef.current = true;
+
+    // Clean up focus=1 param if present in the URL
+    if (typeof window !== 'undefined' && window.location.search.includes('focus=1')) {
+      try {
+        const cleanUrl = window.location.pathname + window.location.hash;
+        window.history.replaceState(null, '', cleanUrl);
+      } catch {}
+    }
 
     let attempts = 0;
     const focusInterval = setInterval(() => {
@@ -305,13 +314,13 @@ const SearchBar = ({ isDashboardActive = true }) => {
       if (!isAnotherInput && inputRef.current) {
         inputRef.current.focus({ preventScroll: true });
       }
-      if (attempts >= 5) {
+      if (attempts >= 10) {
         clearInterval(focusInterval);
       }
-    }, 60);
+    }, 50);
 
     return () => clearInterval(focusInterval);
-  }, [isDashboardActive]);
+  }, [isDashboardActive, features.autoFocusSearch]);
 
   // Type-anywhere-to-focus on Dashboard + SearchBar keyboard shortcuts
   useEffect(() => {
@@ -679,7 +688,7 @@ const SearchBar = ({ isDashboardActive = true }) => {
             ref={inputRef}
             id="searchInput"
             type="text"
-            autoFocus
+            autoFocus={features.autoFocusSearch !== false}
             autoComplete="off"
             spellCheck={false}
             value={searchQuery}

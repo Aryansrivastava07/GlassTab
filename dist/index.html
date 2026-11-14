@@ -7,9 +7,28 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="./icon48.png">
   <link rel="dns-prefetch" href="https://suggestqueries.google.com">
-  <link rel="preconnect" href="https://suggestqueries.google.com" crossorigin>
+  <link rel="preconnect" href="https://suggestqueries.google.com" crossorigin>
+  <script>
+    (function () {
+      try {
+        var raw = localStorage.getItem('landing_features_config_v1');
+        var enabled = true;
+        if (raw) {
+          var cfg = JSON.parse(raw);
+          if (cfg && (cfg.search === false || cfg.autoFocusSearch === false)) {
+            enabled = false;
+          }
+        }
+        var search = window.location.search || '';
+        if (enabled && !search.includes('focus=1')) {
+          var newSearch = search ? search + '&focus=1' : '?focus=1';
+          window.location.replace(window.location.pathname + newSearch + window.location.hash);
+        }
+      } catch (e) {}
+    })();
+  </script>
   <title>Hello ! </title>
-  <script type="module" crossorigin src="./assets/index-DtkLkhHV.js"></script>
+  <script type="module" crossorigin src="./assets/index-TWS0hVUT.js"></script>
   <link rel="stylesheet" crossorigin href="./assets/index-BJBU3mmU.css">
 </head>
 

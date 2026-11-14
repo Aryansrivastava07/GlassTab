@@ -9,6 +9,7 @@ const FEATURES_STORAGE_KEY = 'landing_features_config_v1';
 export const DEFAULT_FEATURES = {
   // Individual feature toggles
   search: true,
+  autoFocusSearch: true,
   clock: true,
   weather: true,
   speedDials: true,

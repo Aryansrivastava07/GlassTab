@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { X, Plus, Heart, Trash2, RotateCcw, Check, User, ShieldCheck, Move, Copy, ExternalLink, Cloud, Film, Layers, KeyRound, Pencil, RefreshCw, CloudDownload, CloudUpload, Sliders, Grid, Zap, BookOpen, Search, Clock, Sparkles, Loader2, AlertCircle } from 'lucide-react';
+import { X, Plus, Heart, Trash2, RotateCcw, Check, User, ShieldCheck, Move, Copy, ExternalLink, Cloud, Film, Layers, KeyRound, Pencil, RefreshCw, CloudDownload, CloudUpload, Sliders, Grid, Zap, BookOpen, Search, Clock, Sparkles, Loader2, AlertCircle, Focus } from 'lucide-react';
 import { SiteThumbnail } from '../utils/thumbnailHelper';
 import { useAuth } from '../context/AuthContext';
 import { 
@@ -70,6 +70,7 @@ const PRESET_WALLPAPERS = [
 
 const FEATURE_ITEMS = [
   { key: 'search', name: 'Search Bar', desc: 'Central search with engine shortcuts (g, b, d, yt, wiki)', perfBadge: 'Saves RAM', icon: Search },
+  { key: 'autoFocusSearch', name: 'Auto-focus Search on New Tab', desc: 'Focus search bar instead of address bar on Ctrl+T', perfBadge: 'Instant Type', icon: Focus },
   { key: 'clock', name: 'Analog Clock', desc: 'Minimalist clock with animated second hand', perfBadge: 'Stops 1s Timer', icon: Clock },
   { key: 'weather', name: 'Weather Widget', desc: 'Current conditions and 5-day forecast', perfBadge: 'Stops API Polling', icon: Cloud },
   { key: 'speedDials', name: 'Speed Dials Dock', desc: 'Visual shortcut icons dock on the dashboard', perfBadge: 'Reduces DOM', icon: Grid },

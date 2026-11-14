@@ -68,21 +68,22 @@ export const signInWithGoogle = async () => {
             { url: authUrl.toString(), interactive: true },
             async (responseUrl) => {
                 if (chrome.runtime.lastError) {
-                    const rawMsg = chrome.runtime.lastError.message || 'Sign-in was cancelled.';
+                    const rawMsg = chrome.runtime.lastError.message || '';
                     console.warn('[Auth] launchWebAuthFlow error:', rawMsg, 'Redirect URL:', redirectUrl);
+                    const isClosed = rawMsg.toLowerCase().includes('cancel') || 
+                                     rawMsg.toLowerCase().includes('did not approve') || 
+                                     rawMsg.toLowerCase().includes('closed');
                     const err = new Error(
-                        rawMsg.toLowerCase().includes('cancel') || rawMsg.toLowerCase().includes('did not approve')
-                            ? `Sign-in was cancelled. If Google blocked access with 'redirect_uri_mismatch', make sure ${redirectUrl} is authorized in Google Cloud Console.`
-                            : rawMsg
+                        isClosed
+                            ? 'Sign-in window was closed. Please try again or use Email.'
+                            : 'Unable to connect to Google. Please check your internet connection.'
                     );
-                    err.code = 'auth/popup-closed-by-user';
-                    err.redirectUrl = redirectUrl;
+                    err.code = isClosed ? 'auth/popup-closed-by-user' : 'auth/network-request-failed';
                     return reject(err);
                 }
                 if (!responseUrl) {
-                    const err = new Error(`Sign-in was cancelled or failed to open. Check redirect URI: ${redirectUrl}`);
+                    const err = new Error('Sign-in window was closed. Please try again or use Email.');
                     err.code = 'auth/popup-closed-by-user';
-                    err.redirectUrl = redirectUrl;
                     return reject(err);
                 }
 
@@ -93,7 +94,7 @@ export const signInWithGoogle = async () => {
                     const accessToken = params.get('access_token');
 
                     if (!accessToken) {
-                        throw new Error('No access token returned from Google. Make sure the redirect URI is registered in Google Cloud Console.');
+                        throw new Error('Google sign-in could not be completed. Please try again or use Email.');
                     }
 
                     // Exchange the OAuth access token for a Firebase credential
@@ -102,9 +103,9 @@ export const signInWithGoogle = async () => {
                     resolve(result.user);
                 } catch (error) {
                     console.error('Firebase credential exchange failed:', error);
-                    let msg = error.message;
-                    if (error.code === 'auth/invalid-credential' || error.code === 'auth/invalid-action-code') {
-                        msg = 'Google token was rejected by Firebase. The access token may have expired — try signing in again.';
+                    let msg = 'Unable to sign in with Google. Please try again or use Email.';
+                    if (error.code === 'auth/network-request-failed') {
+                        msg = 'Network connection issue. Please check your internet connection.';
                     }
                     const customError = new Error(msg);
                     customError.code = error.code || 'auth/internal-error';
@@ -121,11 +122,15 @@ export const signInWithEmail = async (email, password) => {
         return result.user;
     } catch (error) {
         console.error('Error signing in with Email:', error);
-        let msg = error.message;
+        let msg = 'Unable to sign in. Please check your email and password.';
         if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
-            msg = 'Invalid email or password.';
-        } else if (error.code === 'auth/operation-not-allowed') {
-            msg = 'Email/Password sign-in is disabled in your Firebase Console. Go to Authentication > Sign-in method and enable Email/Password.';
+            msg = 'Incorrect email or password.';
+        } else if (error.code === 'auth/invalid-email') {
+            msg = 'Please enter a valid email address.';
+        } else if (error.code === 'auth/network-request-failed') {
+            msg = 'Network connection issue. Please check your internet connection.';
+        } else if (error.code === 'auth/too-many-requests') {
+            msg = 'Too many attempts. Please wait a moment and try again.';
         }
         const customError = new Error(msg);
         customError.code = error.code;
@@ -142,13 +147,15 @@ export const registerWithEmail = async (email, password, displayName) => {
         return result.user;
     } catch (error) {
         console.error('Error registering with Email:', error);
-        let msg = error.message;
+        let msg = 'Unable to create account. Please try again.';
         if (error.code === 'auth/email-already-in-use') {
-            msg = 'This email is already registered. Please sign in instead.';
+            msg = 'An account with this email already exists. Please sign in instead.';
         } else if (error.code === 'auth/weak-password') {
             msg = 'Password should be at least 6 characters.';
-        } else if (error.code === 'auth/operation-not-allowed') {
-            msg = 'Email/Password provider is disabled in Firebase Console. Go to Authentication > Sign-in method and enable Email/Password.';
+        } else if (error.code === 'auth/invalid-email') {
+            msg = 'Please enter a valid email address.';
+        } else if (error.code === 'auth/network-request-failed') {
+            msg = 'Network connection issue. Please check your internet connection.';
         }
         const customError = new Error(msg);
         customError.code = error.code;

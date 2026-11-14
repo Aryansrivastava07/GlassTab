@@ -11,6 +11,7 @@ import { getCachedUserData } from '../utils/cacheService';
 import { getUrlSuggestionsForName } from '../utils/urlSuggestionService';
 import UrlSuggestions from './UrlSuggestions';
 import { getGlassTheme, getGlassStyleForPart, getTextStyleForPart, getMutedTextStyleForPart } from '../utils/glassThemeService';
+import { SiteThumbnail } from '../utils/thumbnailHelper';
 
 const FavoritesBar = () => {
   const { currentUser } = useAuth();
@@ -242,23 +243,14 @@ const FavoritesBar = () => {
                   className="flex items-center justify-between p-2.5 bg-black/30 hover:bg-white/10 rounded-xl border border-white/10 hover:border-white/25 transition-all duration-200 group cursor-pointer"
                 >
                   <div className="flex items-center space-x-3 flex-1 min-w-0">
-                    <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center shrink-0 overflow-hidden">
-                      {isImage ? (
-                        <img
-                          src={iconSrc}
-                          alt=""
-                          className="w-5 h-5 object-contain"
-                          onError={(e) => {
-                            e.currentTarget.style.display = 'none';
-                            if (e.currentTarget.nextSibling) {
-                              e.currentTarget.nextSibling.style.display = 'block';
-                            }
-                          }}
-                        />
-                      ) : null}
-                      <span className={isImage ? 'hidden text-base' : 'text-base'}>
-                        {(!isImage && iconSrc) ? iconSrc : '🌐'}
-                      </span>
+                    <div className="w-8 h-8 rounded-lg bg-black/40 border border-white/10 flex items-center justify-center shrink-0 overflow-hidden">
+                      <SiteThumbnail
+                        logo={iconSrc}
+                        name={favorite.name}
+                        url={favorite.url}
+                        className="w-5 h-5"
+                        fallbackClassName="text-[11px]"
+                      />
                     </div>
                     <div className="flex-1 min-w-0">
                       <h4

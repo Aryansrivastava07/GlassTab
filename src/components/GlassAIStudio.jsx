@@ -21,6 +21,7 @@ import {
   ShieldCheck,
   Globe,
   Lock,
+  AlertCircle,
 } from 'lucide-react';
 import {
   DEFAULT_CHARACTERS,
@@ -221,7 +222,13 @@ export const GlassAIStudio = ({ onScrollToDashboard }) => {
     try {
       await signInWithGoogle();
     } catch (err) {
-      setSignInError(err?.message || 'Google sign-in failed. Please try again or use Email sign-in.');
+      if (err?.code === 'auth/popup-closed-by-user') {
+        setSignInError('Sign-in window was closed. Please try again or use Email.');
+      } else if (err?.code === 'auth/network-request-failed') {
+        setSignInError('Network connection issue. Please check your internet connection.');
+      } else {
+        setSignInError(err?.message || 'Unable to sign in with Google. Please try again or use Email.');
+      }
     } finally {
       setIsSigningIn(false);
     }
@@ -754,8 +761,9 @@ export const GlassAIStudio = ({ onScrollToDashboard }) => {
                 </div>
 
                 {signInError && (
-                  <div className="p-2.5 rounded-xl bg-red-500/15 border border-red-500/30 text-red-300 text-xs text-left leading-relaxed">
-                    {signInError}
+                  <div className="p-2.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-200 text-xs text-left leading-relaxed flex items-center gap-2 animate-fadeIn">
+                    <AlertCircle size={15} className="text-amber-400 shrink-0" />
+                    <span>{signInError}</span>
                   </div>
                 )}
 

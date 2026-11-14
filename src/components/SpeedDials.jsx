@@ -12,6 +12,7 @@ import { getCachedUserData } from "../utils/cacheService";
 import { getUrlSuggestionsForName } from "../utils/urlSuggestionService";
 import UrlSuggestions from "./UrlSuggestions";
 import { getGlassTheme, getGlassStyleForPart, getTextStyleForPart, getMutedTextStyleForPart } from "../utils/glassThemeService";
+import { SiteThumbnail } from "../utils/thumbnailHelper";
 
 const FALLBACK_SPEED_DIALS = [
   { id: 1, name: "Google", url: "https://google.com", logo: "https://www.google.com/s2/favicons?domain=google.com&sz=128" },
@@ -200,14 +201,11 @@ const SpeedDials = ({ onCountChange }) => {
           >
             {/* Icon Tile */}
             <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-black/40 border border-white/15 flex items-center justify-center shadow-md group-hover/item:scale-105 group-hover/item:border-white/35 group-hover/item:shadow-blue-500/20 group-hover/item:shadow-lg transition-all duration-200 overflow-hidden">
-              <img
-                src={item.logo}
-                alt={item.name}
-                className="w-7 h-7 sm:w-8 sm:h-8 object-contain"
-                onError={(e) => {
-                  e.target.onerror = null;
-                  e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name)}&background=2563eb&color=fff&size=64`;
-                }}
+              <SiteThumbnail
+                logo={item.logo}
+                name={item.name}
+                url={item.url}
+                className="w-7 h-7 sm:w-8 sm:h-8"
               />
             </div>
 

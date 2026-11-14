@@ -22,6 +22,7 @@ import {
   Globe,
   Lock,
   AlertCircle,
+  MessageSquare,
 } from 'lucide-react';
 import {
   DEFAULT_CHARACTERS,
@@ -200,6 +201,7 @@ export const GlassAIStudio = ({ onScrollToDashboard }) => {
   const [apiKeyInput, setApiKeyInput] = useState(() => getGeminiApiKey());
   const [apiKeyNotice, setApiKeyNotice] = useState('');
   const [trialUsage, setTrialUsage] = useState(() => getFreeTrialUsage(effectiveUid));
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const isUnlocked = isSignedIn || Boolean(trialUsage.hasCustomKey);
 
   // Subscribe to real-time Cloud Firestore trial usage for this account
@@ -306,6 +308,7 @@ export const GlassAIStudio = ({ onScrollToDashboard }) => {
   // --- ACTIONS ---
   const handleSelectThread = (threadId) => {
     setActiveThreadId(threadId);
+    setIsMobileSidebarOpen(false);
     const target = threads.find((t) => t.id === threadId);
     if (target?.characterId) {
       setActiveCharacterId(target.characterId);
@@ -313,6 +316,7 @@ export const GlassAIStudio = ({ onScrollToDashboard }) => {
   };
 
   const handleCreateNewChat = (charId = activeCharacterId) => {
+    setIsMobileSidebarOpen(false);
     const { threads: nextThreads, activeThread: created } = createNewThread(charId);
     setThreads(nextThreads);
     setActiveThreadId(created.id);
@@ -524,8 +528,20 @@ export const GlassAIStudio = ({ onScrollToDashboard }) => {
   return (
     <div className="w-full max-w-6xl h-[88vh] bg-[#0c1017]/95 dark-glass rounded-3xl border border-white/15 flex shadow-[0_24px_80px_rgba(0,0,0,0.8)] overflow-hidden backdrop-blur-2xl relative select-text">
       
+      {/* Mobile backdrop for sidebar */}
+      {isMobileSidebarOpen && (
+        <div
+          className="md:hidden absolute inset-0 bg-black/60 z-20 backdrop-blur-xs"
+          onClick={() => setIsMobileSidebarOpen(false)}
+        />
+      )}
+
       {/* ================= LEFT SIDEBAR (THREADS & HISTORY) ================= */}
-      <div className="w-64 sm:w-72 bg-black/40 border-r border-white/10 flex flex-col shrink-0">
+      <div className={`w-64 sm:w-72 bg-[#0c1017] sm:bg-black/40 border-r border-white/10 flex flex-col shrink-0 z-30 transition-transform duration-200 ${
+        isMobileSidebarOpen
+          ? 'absolute inset-y-0 left-0 shadow-2xl translate-x-0'
+          : 'hidden md:flex'
+      }`}>
         
         {/* Sidebar Header */}
         <div className="p-4 border-b border-white/10 flex items-center justify-between">
@@ -657,16 +673,26 @@ export const GlassAIStudio = ({ onScrollToDashboard }) => {
         {/* Top Chat Header */}
         <div className="h-14 px-4 sm:px-6 border-b border-white/10 flex items-center justify-between bg-black/25 shrink-0">
           
-          {/* Top Left: Character Selector & Avatar Menu */}
-          <div className="relative">
+          {/* Top Left: Mobile Sidebar Toggle + Character Selector & Avatar Menu */}
+          <div className="flex items-center gap-2">
             <button
-              onClick={() => setShowCharacterMenu(!showCharacterMenu)}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 text-white text-xs font-semibold shadow-sm transition cursor-pointer"
+              type="button"
+              onClick={() => setIsMobileSidebarOpen((prev) => !prev)}
+              className="md:hidden p-1.5 rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 text-white transition cursor-pointer"
+              title="Toggle Conversations"
             >
-              <span className="text-base">{activeCharacter.avatar}</span>
-              <span className="truncate max-w-[120px]">{activeCharacter.name}</span>
-              <ChevronDown size={13} className="text-gray-400" />
+              <MessageSquare size={16} />
             </button>
+
+            <div className="relative">
+              <button
+                onClick={() => setShowCharacterMenu(!showCharacterMenu)}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 text-white text-xs font-semibold shadow-sm transition cursor-pointer"
+              >
+                <span className="text-base">{activeCharacter.avatar}</span>
+                <span className="truncate max-w-[120px]">{activeCharacter.name}</span>
+                <ChevronDown size={13} className="text-gray-400" />
+              </button>
 
             {/* Character Dropdown Menu */}
             {showCharacterMenu && (
@@ -709,6 +735,7 @@ export const GlassAIStudio = ({ onScrollToDashboard }) => {
               </div>
             )}
           </div>
+        </div>
 
           {/* Top Right: Web Search Grounding, Model badge & Return Button */}
           <div className="flex items-center gap-2.5">

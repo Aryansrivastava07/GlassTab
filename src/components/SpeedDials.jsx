@@ -169,13 +169,14 @@ const SpeedDials = ({ onCountChange }) => {
   const numRows = Math.max(1, Math.floor((containerSize.height + 12) / slotHeight));
   const totalCapacity = numCols * numRows;
 
-  // Extra width/capacity will render as dotted thumbnail placeholder areas
-  const emptySlotsCount = Math.max(0, totalCapacity - speedDials.length);
+  // Extra width/capacity will render as dotted thumbnail placeholder areas (hidden on compact screens)
+  const isNarrow = containerSize.width < 640;
+  const emptySlotsCount = isNarrow ? 0 : Math.max(0, totalCapacity - speedDials.length);
 
   return (
     <div
       ref={containerRef}
-      className="speed-dials-dock relative w-full h-full dark-glass rounded-2xl p-3 sm:p-3.5 border border-white/10 shadow-2xl flex flex-col items-center overflow-hidden select-none group"
+      className="speed-dials-dock relative w-full h-full min-h-[110px] dark-glass rounded-2xl p-3 sm:p-3.5 border border-white/10 shadow-2xl flex flex-col items-center overflow-y-auto select-none group"
       style={{
         ...getGlassStyleForPart(glassTheme.speedDial),
         ...getTextStyleForPart(glassTheme.speedDial),

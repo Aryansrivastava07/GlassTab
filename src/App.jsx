@@ -83,6 +83,20 @@ function AppContent() {
   const [isStudioOpen, setIsStudioOpen] = useState(false);
   const [editingWidget, setEditingWidget] = useState(null);
 
+  // Responsive mode detection (automatically adapts when window is minimized or small)
+  const [isCompact, setIsCompact] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.innerWidth < 1024 || window.innerHeight < 680;
+  });
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsCompact(window.innerWidth < 1024 || window.innerHeight < 680);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   useEffect(() => {
     applyCssVariables(getGlassTheme(effectiveUid));
   }, [effectiveUid]);
@@ -329,7 +343,7 @@ function AppContent() {
       {/* ================= FIXED DASHBOARD IN BACK ================= */}
       <section
         id="dashboard-screen"
-        className="fixed inset-0 z-10 overflow-hidden"
+        className="fixed inset-0 z-10 overflow-y-auto overflow-x-hidden"
         style={{
           transform: activeView === 'dashboard' ? 'scale(1)' : 'scale(0.97)',
           opacity: activeView === 'dashboard' ? 1 : 0.45,
@@ -338,161 +352,246 @@ function AppContent() {
           pointerEvents: activeView === 'dashboard' ? 'auto' : 'none',
         }}
       >
-          {/* Top Header Navbar */}
-          <div className="absolute top-4 right-5 z-50">
-            <Navbar
-              onResetLayout={handleResetLayout}
-              isDragEnabled={isDragEnabled}
-              onToggleDrag={handleToggleDrag}
-              onOpenWidgetStudio={() => {
-                setEditingWidget(null);
-                setIsStudioOpen(true);
-              }}
-              onOpenAiStudio={() => transitionTo('ai-studio')}
-              customWidgets={customWidgets}
-              onEditWidget={(w) => {
-                setEditingWidget(w);
-                setIsStudioOpen(true);
-              }}
-              onDeleteWidget={handleDeleteCustomWidget}
-              standbyMode={features.standbyMode}
-              onToggleStandby={toggleStandbyMode}
-            />
+        {isCompact ? (
+          /* ================= RESPONSIVE COMPACT FLOW LAYOUT ================= */
+          <div className="w-full max-w-4xl mx-auto flex flex-col items-center px-3 sm:px-6 pt-3 pb-24 gap-3 sm:gap-4 select-text">
+            {/* Responsive Top Header: Weather + Clock on Left, Navbar Controls on Right */}
+            <div className="w-full flex items-center justify-between gap-2.5 min-h-[52px]">
+              <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+                {features.weather && (
+                  <div className="h-24 sm:h-28 w-44 sm:w-56 shrink-0">
+                    <WeatherWidget />
+                  </div>
+                )}
+                {features.clock && (
+                  <div className="w-20 h-20 sm:w-24 sm:h-24 shrink-0 flex items-center justify-center">
+                    <AnalogClock />
+                  </div>
+                )}
+              </div>
+
+              <div className="shrink-0 self-start pt-1">
+                <Navbar
+                  onResetLayout={handleResetLayout}
+                  isDragEnabled={isDragEnabled}
+                  onToggleDrag={handleToggleDrag}
+                  onOpenWidgetStudio={() => {
+                    setEditingWidget(null);
+                    setIsStudioOpen(true);
+                  }}
+                  onOpenAiStudio={() => transitionTo('ai-studio')}
+                  customWidgets={customWidgets}
+                  onEditWidget={(w) => {
+                    setEditingWidget(w);
+                    setIsStudioOpen(true);
+                  }}
+                  onDeleteWidget={handleDeleteCustomWidget}
+                  standbyMode={features.standbyMode}
+                  onToggleStandby={toggleStandbyMode}
+                />
+              </div>
+            </div>
+
+            {/* 1. Search Bar */}
+            {features.search && (
+              <div className="w-full max-w-2xl h-13 sm:h-14 my-1">
+                <SearchBar isDashboardActive={activeView === 'dashboard'} />
+              </div>
+            )}
+
+            {/* 2. Speed Dials Dock */}
+            {!features.standbyMode && features.speedDials && (
+              <div className="w-full max-w-2xl min-h-[110px] my-1">
+                <SpeedDials onCountChange={setSpeedDialsCount} />
+              </div>
+            )}
+
+            {/* 3. Favorites Bar */}
+            {!features.standbyMode && features.favorites && (
+              <div className="w-full max-w-3xl min-h-[180px] max-h-[380px] my-1">
+                <FavoritesBar />
+              </div>
+            )}
+
+            {/* 4. Custom User Widgets */}
+            {!features.standbyMode &&
+              features.customWidgets &&
+              customWidgets.map((cw) => (
+                <div key={cw.id} className="w-full max-w-xl min-h-[120px] my-1 rounded-2xl overflow-hidden">
+                  <CustomWidgetFrame
+                    widget={cw}
+                    width={360}
+                    height={210}
+                    showControls={isDragEnabled}
+                    onEdit={(target) => {
+                      setEditingWidget(target);
+                      setIsStudioOpen(true);
+                    }}
+                    onDelete={handleDeleteCustomWidget}
+                  />
+                </div>
+              ))}
           </div>
+        ) : (
+          /* ================= DESKTOP DRAGGABLE & RESIZABLE LAYOUT ================= */
+          <>
+            {/* Top Header Navbar */}
+            <div className="absolute top-4 right-5 z-50">
+              <Navbar
+                onResetLayout={handleResetLayout}
+                isDragEnabled={isDragEnabled}
+                onToggleDrag={handleToggleDrag}
+                onOpenWidgetStudio={() => {
+                  setEditingWidget(null);
+                  setIsStudioOpen(true);
+                }}
+                onOpenAiStudio={() => transitionTo('ai-studio')}
+                customWidgets={customWidgets}
+                onEditWidget={(w) => {
+                  setEditingWidget(w);
+                  setIsStudioOpen(true);
+                }}
+                onDeleteWidget={handleDeleteCustomWidget}
+                standbyMode={features.standbyMode}
+                onToggleStandby={toggleStandbyMode}
+              />
+            </div>
 
-        {/* 1. Draggable & Resizable Weather Widget */}
-        {features.weather && (
-          <DraggableWidget
-            id="weather"
-            title="Weather"
-            layout={layout.weather}
-            defaultLayout={defaultLayout.weather}
-            onLayoutChange={handleLayoutChange}
-            minWidth={210}
-            minHeight={115}
-            className="rounded-2xl"
-            draggable={isDragEnabled}
-            resizable={isDragEnabled}
-          >
-            <WeatherWidget />
-          </DraggableWidget>
-        )}
-
-        {/* 2. Draggable & Resizable Analog Clock */}
-        {features.clock && (
-          <DraggableWidget
-            id="clock"
-            title="Clock"
-            layout={layout.clock}
-            defaultLayout={defaultLayout.clock}
-            onLayoutChange={handleLayoutChange}
-            minWidth={100}
-            minHeight={100}
-            className="rounded-full"
-            draggable={isDragEnabled}
-            resizable={isDragEnabled}
-          >
-            <AnalogClock />
-          </DraggableWidget>
-        )}
-
-        {/* 3. Draggable & Resizable Search Bar */}
-        {features.search && (
-          <DraggableWidget
-            id="search"
-            title="Search"
-            layout={layout.search}
-            defaultLayout={defaultLayout.search}
-            onLayoutChange={handleLayoutChange}
-            minWidth={340}
-            minHeight={50}
-            className="rounded-full"
-            draggable={isDragEnabled}
-            resizable={isDragEnabled}
-          >
-            <SearchBar isDashboardActive={activeView === 'dashboard'} />
-          </DraggableWidget>
-        )}
-
-        {/* 4. Draggable & Resizable Speed Dials Dock */}
-        {!features.standbyMode && features.speedDials && (
-          <DraggableWidget
-            id="speedDials"
-            title="Speed Dials"
-            layout={layout.speedDials}
-            defaultLayout={defaultLayout.speedDials}
-            onLayoutChange={handleLayoutChange}
-            minWidth={speedDialsMinWidth}
-            minHeight={115}
-            className="rounded-2xl"
-            draggable={isDragEnabled}
-            resizable={isDragEnabled}
-          >
-            <SpeedDials onCountChange={setSpeedDialsCount} />
-          </DraggableWidget>
-        )}
-
-        {/* 5. Draggable & Resizable Favorites Bar */}
-        {!features.standbyMode && features.favorites && (
-          <DraggableWidget
-            id="favorites"
-            title="Favorites"
-            layout={layout.favorites}
-            defaultLayout={defaultLayout.favorites}
-            onLayoutChange={handleLayoutChange}
-            minWidth={320}
-            minHeight={150}
-            className="rounded-2xl"
-            draggable={isDragEnabled}
-            resizable={isDragEnabled}
-          >
-            <FavoritesBar />
-          </DraggableWidget>
-        )}
-
-        {/* 6+. User Custom Sandboxed Widgets */}
-        {!features.standbyMode &&
-          features.customWidgets &&
-          customWidgets.map((cw) => {
-            const key = `custom_${cw.id}`;
-            const widgetDefaultLayout = {
-              x: 40,
-              y: 185,
-              width: cw.width || 360,
-              height: cw.height || 210,
-              minWidth: 160,
-              minHeight: 100,
-            };
-            const activeLayout = layout[key] || widgetDefaultLayout;
-
-            return (
+            {/* 1. Draggable & Resizable Weather Widget */}
+            {features.weather && (
               <DraggableWidget
-                key={cw.id}
-                id={key}
-                title={cw.name}
-                layout={activeLayout}
-                defaultLayout={widgetDefaultLayout}
+                id="weather"
+                title="Weather"
+                layout={layout.weather}
+                defaultLayout={defaultLayout.weather}
                 onLayoutChange={handleLayoutChange}
-                minWidth={160}
-                minHeight={100}
+                minWidth={210}
+                minHeight={115}
                 className="rounded-2xl"
                 draggable={isDragEnabled}
                 resizable={isDragEnabled}
               >
-                <CustomWidgetFrame
-                  widget={cw}
-                  width={activeLayout.width}
-                  height={activeLayout.height}
-                  showControls={isDragEnabled}
-                  onEdit={(target) => {
-                    setEditingWidget(target);
-                    setIsStudioOpen(true);
-                  }}
-                  onDelete={handleDeleteCustomWidget}
-                />
+                <WeatherWidget />
               </DraggableWidget>
-            );
-          })}
+            )}
+
+            {/* 2. Draggable & Resizable Analog Clock */}
+            {features.clock && (
+              <DraggableWidget
+                id="clock"
+                title="Clock"
+                layout={layout.clock}
+                defaultLayout={defaultLayout.clock}
+                onLayoutChange={handleLayoutChange}
+                minWidth={100}
+                minHeight={100}
+                className="rounded-full"
+                draggable={isDragEnabled}
+                resizable={isDragEnabled}
+              >
+                <AnalogClock />
+              </DraggableWidget>
+            )}
+
+            {/* 3. Draggable & Resizable Search Bar */}
+            {features.search && (
+              <DraggableWidget
+                id="search"
+                title="Search"
+                layout={layout.search}
+                defaultLayout={defaultLayout.search}
+                onLayoutChange={handleLayoutChange}
+                minWidth={340}
+                minHeight={50}
+                className="rounded-full"
+                draggable={isDragEnabled}
+                resizable={isDragEnabled}
+              >
+                <SearchBar isDashboardActive={activeView === 'dashboard'} />
+              </DraggableWidget>
+            )}
+
+            {/* 4. Draggable & Resizable Speed Dials Dock */}
+            {!features.standbyMode && features.speedDials && (
+              <DraggableWidget
+                id="speedDials"
+                title="Speed Dials"
+                layout={layout.speedDials}
+                defaultLayout={defaultLayout.speedDials}
+                onLayoutChange={handleLayoutChange}
+                minWidth={speedDialsMinWidth}
+                minHeight={115}
+                className="rounded-2xl"
+                draggable={isDragEnabled}
+                resizable={isDragEnabled}
+              >
+                <SpeedDials onCountChange={setSpeedDialsCount} />
+              </DraggableWidget>
+            )}
+
+            {/* 5. Draggable & Resizable Favorites Bar */}
+            {!features.standbyMode && features.favorites && (
+              <DraggableWidget
+                id="favorites"
+                title="Favorites"
+                layout={layout.favorites}
+                defaultLayout={defaultLayout.favorites}
+                onLayoutChange={handleLayoutChange}
+                minWidth={320}
+                minHeight={150}
+                className="rounded-2xl"
+                draggable={isDragEnabled}
+                resizable={isDragEnabled}
+              >
+                <FavoritesBar />
+              </DraggableWidget>
+            )}
+
+            {/* 6+. User Custom Sandboxed Widgets */}
+            {!features.standbyMode &&
+              features.customWidgets &&
+              customWidgets.map((cw) => {
+                const key = `custom_${cw.id}`;
+                const widgetDefaultLayout = {
+                  x: 40,
+                  y: 185,
+                  width: cw.width || 360,
+                  height: cw.height || 210,
+                  minWidth: 160,
+                  minHeight: 100,
+                };
+                const activeLayout = layout[key] || widgetDefaultLayout;
+
+                return (
+                  <DraggableWidget
+                    key={cw.id}
+                    id={key}
+                    title={cw.name}
+                    layout={activeLayout}
+                    defaultLayout={widgetDefaultLayout}
+                    onLayoutChange={handleLayoutChange}
+                    minWidth={160}
+                    minHeight={100}
+                    className="rounded-2xl"
+                    draggable={isDragEnabled}
+                    resizable={isDragEnabled}
+                  >
+                    <CustomWidgetFrame
+                      widget={cw}
+                      width={activeLayout.width}
+                      height={activeLayout.height}
+                      showControls={isDragEnabled}
+                      onEdit={(target) => {
+                        setEditingWidget(target);
+                        setIsStudioOpen(true);
+                      }}
+                      onDelete={handleDeleteCustomWidget}
+                    />
+                  </DraggableWidget>
+                );
+              })}
+          </>
+        )}
 
         {/* Floating Notes & Todos Action Button */}
         {!features.standbyMode && features.notesButton && <NotesButton />}

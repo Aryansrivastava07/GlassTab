@@ -22,12 +22,14 @@ const DraggableWidget = ({
 }) => {
   const nodeRef = useRef(null);
 
-  // Content-aware min limits
-  const minWidth = propMinWidth ?? layout?.minWidth ?? defaultLayout?.minWidth ?? 120;
+  // Content-aware min limits (constrained by available viewport)
+  const maxAvailableViewportWidth = typeof window !== 'undefined' ? Math.max(100, window.innerWidth - 20) : 1280;
+  const rawMinWidth = propMinWidth ?? layout?.minWidth ?? defaultLayout?.minWidth ?? 120;
+  const minWidth = Math.min(rawMinWidth, maxAvailableViewportWidth);
   const minHeight = propMinHeight ?? layout?.minHeight ?? defaultLayout?.minHeight ?? 60;
 
-  // Initialize position and size clamped to min limits
-  const initWidth = Math.max(minWidth, layout?.width ?? defaultLayout?.width ?? 300);
+  // Initialize position and size clamped to min limits and viewport
+  const initWidth = Math.min(maxAvailableViewportWidth, Math.max(minWidth, layout?.width ?? defaultLayout?.width ?? 300));
   const initHeight = Math.max(minHeight, layout?.height ?? defaultLayout?.height ?? 120);
 
   const [currentPos, setCurrentPos] = useState({
@@ -96,10 +98,12 @@ const DraggableWidget = ({
     }
   }, [layout, minWidth, minHeight]);
 
-  // Keep within viewport bounds
+  // Keep within viewport bounds with responsive width clamping
   const clampPos = useCallback((x, y, width, height) => {
-    const maxX = Math.max(10, window.innerWidth - width - 10);
-    const maxY = Math.max(10, window.innerHeight - height - 10);
+    const maxAvailW = typeof window !== 'undefined' ? Math.max(100, window.innerWidth - 20) : 1280;
+    const safeW = Math.min(width, maxAvailW);
+    const maxX = Math.max(10, (typeof window !== 'undefined' ? window.innerWidth : 1280) - safeW - 10);
+    const maxY = Math.max(10, (typeof window !== 'undefined' ? window.innerHeight : 800) - height - 10);
     return {
       x: Math.max(10, Math.min(x, maxX)),
       y: Math.max(10, Math.min(y, maxY)),
@@ -108,6 +112,12 @@ const DraggableWidget = ({
 
   useEffect(() => {
     const handleWindowResize = () => {
+      const maxW = Math.max(100, window.innerWidth - 20);
+      setCurrentSize((prev) => {
+        const safeW = Math.min(prev.width, maxW);
+        sizeRef.current = { width: safeW, height: prev.height };
+        return { width: safeW, height: prev.height };
+      });
       setCurrentPos((prev) => {
         const clamped = clampPos(prev.x, prev.y, sizeRef.current.width, sizeRef.current.height);
         posRef.current = clamped;
@@ -286,7 +296,10 @@ const DraggableWidget = ({
         left: `${currentPos.x}px`,
         top: `${currentPos.y}px`,
         width: `${currentSize.width}px`,
+        maxWidth: 'calc(100vw - 20px)',
         height: `${currentSize.height}px`,
+        maxHeight: 'calc(100vh - 20px)',
+        boxSizing: 'border-box',
         zIndex: isDragging || isResizing ? 45 : 20,
         touchAction: 'none',
         willChange: isDragging || isResizing ? 'left, top, width, height' : 'auto',

@@ -8,25 +8,7 @@
   <link rel="icon" type="image/png" href="./icon48.png">
   <link rel="dns-prefetch" href="https://suggestqueries.google.com">
   <link rel="preconnect" href="https://suggestqueries.google.com" crossorigin>
-  <script>
-    (function () {
-      try {
-        var raw = localStorage.getItem('landing_features_config_v1');
-        var enabled = true;
-        if (raw) {
-          var cfg = JSON.parse(raw);
-          if (cfg && (cfg.search === false || cfg.autoFocusSearch === false)) {
-            enabled = false;
-          }
-        }
-        var search = window.location.search || '';
-        if (enabled && !search.includes('focus=1')) {
-          var newSearch = search ? search + '&focus=1' : '?focus=1';
-          window.location.replace(window.location.pathname + newSearch + window.location.hash);
-        }
-      } catch (e) {}
-    })();
-  </script>
+  <script src="/focus-init.js"></script>
   <link rel="stylesheet" href="/src/style.css">
   <title>Hello ! </title>
 </head>

@@ -287,37 +287,31 @@ const SearchBar = ({ isDashboardActive = true }) => {
     if (features.autoFocusSearch === false) return;
     hasAttemptedInitialFocusRef.current = true;
 
-    // Clean up focus=1 param if present in the URL
-    if (typeof window !== 'undefined' && window.location.search.includes('focus=1')) {
-      try {
-        const cleanUrl = window.location.pathname + window.location.hash;
-        window.history.replaceState(null, '', cleanUrl);
-      } catch {}
-    }
+    const tryFocus = () => {
+      if (isAnyModalOpen()) return false;
+      if (document.activeElement === inputRef.current) return true;
+      const isAnotherInput =
+        document.activeElement instanceof HTMLInputElement ||
+        document.activeElement instanceof HTMLTextAreaElement ||
+        document.activeElement?.isContentEditable;
+      if (!isAnotherInput && inputRef.current) {
+        window.focus();
+        inputRef.current.focus({ preventScroll: true });
+        return document.activeElement === inputRef.current;
+      }
+      return false;
+    };
+
+    // Try immediately on mount
+    if (tryFocus()) return;
 
     let attempts = 0;
     const focusInterval = setInterval(() => {
       attempts++;
-      if (isAnyModalOpen()) {
-        clearInterval(focusInterval);
-        return;
-      }
-      const active = document.activeElement;
-      if (active === inputRef.current) {
-        clearInterval(focusInterval);
-        return;
-      }
-      const isAnotherInput =
-        active instanceof HTMLInputElement ||
-        active instanceof HTMLTextAreaElement ||
-        active?.isContentEditable;
-      if (!isAnotherInput && inputRef.current) {
-        inputRef.current.focus({ preventScroll: true });
-      }
-      if (attempts >= 10) {
+      if (tryFocus() || attempts >= 20) {
         clearInterval(focusInterval);
       }
-    }, 50);
+    }, 30);
 
     return () => clearInterval(focusInterval);
   }, [isDashboardActive, features.autoFocusSearch]);

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { auth } from '../firebase';
 import { onAuthStateChanged } from 'firebase/auth';
+import { fetchAndRestoreGeminiKeyFromCloud } from '../services/secureKeyService';
 
 const AuthContext = createContext();
 const AUTH_CACHE_KEY = 'landing_cached_auth_user';
@@ -68,6 +69,11 @@ export const AuthProvider = ({ children }) => {
         if (!isMounted) return;
         setCurrentUser(user);
         writeCachedAuthUser(user);
+        if (user?.uid && user.uid !== 'local_guest') {
+          fetchAndRestoreGeminiKeyFromCloud(user.uid).catch((err) => {
+            console.warn('Auto-restore Gemini key warning:', err);
+          });
+        }
         setLoading(false);
       });
       return () => {

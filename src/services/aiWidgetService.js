@@ -1,28 +1,17 @@
 // AI Prompt Builder, Query Validator & Confirmed Live Data Connectors for Custom Widgets
+import {
+  getLocalGeminiApiKey,
+  saveAndSyncGeminiKey,
+  maskApiKey,
+  subscribeToCloudGeminiKey,
+  fetchAndRestoreGeminiKeyFromCloud,
+} from './secureKeyService';
 
-const GEMINI_API_KEY_STORAGE = 'landing_gemini_api_key';
-
-export const getGeminiApiKey = () => {
-  try {
-    return localStorage.getItem(GEMINI_API_KEY_STORAGE) || '';
-  } catch {
-    return '';
-  }
+export const getGeminiApiKey = getLocalGeminiApiKey;
+export const saveGeminiApiKey = (apiKey, userId = null) => {
+  return saveAndSyncGeminiKey(apiKey, userId);
 };
-
-export const saveGeminiApiKey = (apiKey) => {
-  try {
-    if (!apiKey?.trim()) {
-      localStorage.removeItem(GEMINI_API_KEY_STORAGE);
-      return '';
-    }
-    const clean = apiKey.trim();
-    localStorage.setItem(GEMINI_API_KEY_STORAGE, clean);
-    return clean;
-  } catch {
-    return '';
-  }
-};
+export { maskApiKey, subscribeToCloudGeminiKey, fetchAndRestoreGeminiKeyFromCloud };
 
 export const WIDGET_SIZE_PRESETS = [
   { id: 'compact', label: 'Compact Tile', width: 240, height: 135, desc: 'Battery, speed, timer' },

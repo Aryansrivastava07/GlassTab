@@ -23,6 +23,8 @@ import {
   Lock,
   AlertCircle,
   MessageSquare,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import {
   DEFAULT_CHARACTERS,
@@ -38,7 +40,7 @@ import {
   subscribeToAccountAiTrialUsage,
   sendAiMessage,
 } from '../services/aiChatService';
-import { getGeminiApiKey, saveGeminiApiKey } from '../services/aiWidgetService';
+import { getGeminiApiKey, saveGeminiApiKey, maskApiKey, subscribeToCloudGeminiKey } from '../services/aiWidgetService';
 import { useAuth } from '../context/AuthContext';
 import { signInWithGoogle, signInWithEmail, registerWithEmail } from '../services/authService';
 
@@ -199,17 +201,35 @@ export const GlassAIStudio = ({ onScrollToDashboard }) => {
   const [showCustomCharModal, setShowCustomCharModal] = useState(false);
   const [showApiKeyModal, setShowApiKeyModal] = useState(false);
   const [apiKeyInput, setApiKeyInput] = useState(() => getGeminiApiKey());
+  const [showKeyPassword, setShowKeyPassword] = useState(false);
   const [apiKeyNotice, setApiKeyNotice] = useState('');
   const [trialUsage, setTrialUsage] = useState(() => getFreeTrialUsage(effectiveUid));
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const isUnlocked = isSignedIn || Boolean(trialUsage.hasCustomKey);
 
-  // Subscribe to real-time Cloud Firestore trial usage for this account
+  // Subscribe to real-time Cloud Firestore trial usage & encrypted Gemini key
   useEffect(() => {
-    const unsubscribe = subscribeToAccountAiTrialUsage(effectiveUid, (usage) => {
+    const unsubTrial = subscribeToAccountAiTrialUsage(effectiveUid, (usage) => {
       setTrialUsage(usage);
     });
-    return () => unsubscribe();
+    const unsubKey = subscribeToCloudGeminiKey(effectiveUid, (cloudKey) => {
+      if (cloudKey) setApiKeyInput(cloudKey);
+      setTrialUsage(getFreeTrialUsage(effectiveUid));
+    });
+
+    const onKeyChanged = (e) => {
+      if (e.detail?.key !== undefined) {
+        setApiKeyInput(e.detail.key);
+      }
+      setTrialUsage(getFreeTrialUsage(effectiveUid));
+    };
+    window.addEventListener('landing_gemini_key_changed', onKeyChanged);
+
+    return () => {
+      unsubTrial();
+      unsubKey();
+      window.removeEventListener('landing_gemini_key_changed', onKeyChanged);
+    };
   }, [effectiveUid]);
 
   const [showEmailAuth, setShowEmailAuth] = useState(false);
@@ -372,13 +392,27 @@ export const GlassAIStudio = ({ onScrollToDashboard }) => {
     }
   };
 
-  const handleSaveApiKey = (e) => {
+  const handleSaveApiKey = async (e) => {
     e.preventDefault();
-    saveGeminiApiKey(apiKeyInput.trim());
+    await saveGeminiApiKey(apiKeyInput.trim(), effectiveUid);
     setTrialUsage(getFreeTrialUsage(effectiveUid));
-    setApiKeyNotice('API Key saved! Unlimited AI chat unlocked.');
+    setApiKeyNotice(
+      isSignedIn
+        ? '🔒 Encrypted with AES-256 and synced to your Google Account!'
+        : 'API Key saved securely in your browser!'
+    );
     setTimeout(() => {
       setShowApiKeyModal(false);
+      setApiKeyNotice('');
+    }, 1400);
+  };
+
+  const handleRemoveApiKey = async () => {
+    await saveGeminiApiKey('', effectiveUid);
+    setApiKeyInput('');
+    setTrialUsage(getFreeTrialUsage(effectiveUid));
+    setApiKeyNotice('API Key removed.');
+    setTimeout(() => {
       setApiKeyNotice('');
     }, 1200);
   };
@@ -470,7 +504,7 @@ export const GlassAIStudio = ({ onScrollToDashboard }) => {
     } catch (err) {
       if (err.message === 'SIGN_IN_REQUIRED') {
         setSignInError('Sign in with Google to use AI Studio.');
-      } else if (err.message === 'TRIAL_EXHAUSTED') {
+      } else if (err.message === 'TRIAL_EXHAUSTED' || err.message === 'MISSING_API_KEY') {
         setShowApiKeyModal(true);
       } else {
         const errorMsg = {
@@ -1160,12 +1194,35 @@ export const GlassAIStudio = ({ onScrollToDashboard }) => {
 
             <div>
               <h3 className="text-lg font-bold text-white tracking-tight">
-                {trialUsage.isExhausted ? 'Free Trial Limit Reached (10/10)' : 'Google Gemini API Key'}
+                Google Gemini API Key
               </h3>
               <p className="text-xs text-gray-400 mt-1.5 leading-relaxed">
-                To enjoy **unlimited, completely private AI conversations** with Ginnie and custom characters, add your own free Google Gemini API key.
+                Add your personal free Gemini key for <strong>unlimited AI chats</strong> with Ginnie &amp; custom personas. Synced securely to your Google account with AES-256 encryption.
               </p>
             </div>
+
+            {/* Currently Active Masked Key Display */}
+            {trialUsage.hasCustomKey && (
+              <div className="p-3 bg-emerald-500/10 border border-emerald-500/25 rounded-2xl text-left space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-semibold text-emerald-300 flex items-center gap-1.5">
+                    <ShieldCheck size={14} className="text-emerald-400" />
+                    {isSignedIn ? 'AES-256 Encrypted & Cloud Synced' : 'Active & Stored Locally'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleRemoveApiKey}
+                    className="text-[10px] text-rose-400 hover:text-rose-300 underline cursor-pointer"
+                  >
+                    Remove Key
+                  </button>
+                </div>
+                <div className="text-xs font-mono text-gray-300 tracking-wider bg-black/40 px-2.5 py-1.5 rounded-lg border border-white/10 flex items-center justify-between">
+                  <span>{maskApiKey(apiKeyInput)}</span>
+                  <span className="text-[9px] text-emerald-400 uppercase font-sans font-bold">Active</span>
+                </div>
+              </div>
+            )}
 
             {apiKeyNotice && (
               <div className="p-2.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-medium">
@@ -1175,15 +1232,27 @@ export const GlassAIStudio = ({ onScrollToDashboard }) => {
 
             <form onSubmit={handleSaveApiKey} className="space-y-3 text-left">
               <div>
-                <label className="text-[11px] text-gray-300 block mb-1 font-medium">Paste Your Gemini API Key</label>
-                <input
-                  type="password"
-                  required
-                  placeholder="AIzaSy..."
-                  value={apiKeyInput}
-                  onChange={(e) => setApiKeyInput(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-black/40 border border-white/20 rounded-xl text-xs text-white placeholder-gray-500 focus:outline-none focus:border-amber-400 font-mono"
-                />
+                <label className="text-[11px] text-gray-300 block mb-1 font-medium">
+                  {trialUsage.hasCustomKey ? 'Replace API Key' : 'Paste Your Gemini API Key'}
+                </label>
+                <div className="relative">
+                  <input
+                    type={showKeyPassword ? 'text' : 'password'}
+                    required
+                    placeholder="AIzaSy..."
+                    value={apiKeyInput}
+                    onChange={(e) => setApiKeyInput(e.target.value)}
+                    className="w-full px-3.5 py-2.5 pr-10 bg-black/40 border border-white/20 rounded-xl text-xs text-white placeholder-gray-500 focus:outline-none focus:border-amber-400 font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowKeyPassword((prev) => !prev)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition"
+                    title={showKeyPassword ? 'Hide Key' : 'Show Key'}
+                  >
+                    {showKeyPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                  </button>
+                </div>
               </div>
 
               <div className="p-3 rounded-xl bg-white/5 border border-white/10 space-y-1 text-left">
@@ -1216,7 +1285,7 @@ export const GlassAIStudio = ({ onScrollToDashboard }) => {
                   type="submit"
                   className="flex-1 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-white text-xs font-semibold rounded-xl shadow-lg transition"
                 >
-                  Save &amp; Unlock Unlimited
+                  Save &amp; Encrypt Key
                 </button>
               </div>
             </form>

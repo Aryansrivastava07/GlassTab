@@ -56,7 +56,7 @@ const SYNC_STATUS_BADGE = {
   cloud_empty: { label: 'Not Pushed Yet', cls: 'bg-white/10 border-white/20 text-gray-300' },
   unknown: { label: 'Manual Sync', cls: 'bg-white/10 border-white/15 text-gray-300' },
 };
-import { getGeminiApiKey, saveGeminiApiKey } from '../services/aiWidgetService';
+import { getGeminiApiKey, saveGeminiApiKey, maskApiKey } from '../services/aiWidgetService';
 import { saveWallpaperMeta } from './WallpaperManager';
 import defaultLocalWallpaper from '../assets/walpaper2.jpg';
 import { signInWithGoogle, signInWithEmail, registerWithEmail, logout, getExtensionOrigin, getOAuthRedirectURL } from '../services/authService';
@@ -876,21 +876,35 @@ const Sidebar = ({
                   Gemini AI API Key (Widget Builder)
                 </h4>
                 <p className="text-xs text-gray-400 leading-relaxed">
-                  Optional: Save a free Google AI Studio key so Custom Widget Studio can generate widget code in 1 click. (Prompt copying always works free with zero key!)
+                  Optional: Save a free Google AI Studio key to generate custom widgets in 1 click and power AI Studio. Synced securely to your account with AES-256 encryption.
                 </p>
+                {geminiApiKey && (
+                  <div className="flex items-center justify-between text-[11px] text-emerald-400 font-mono bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1.5 rounded-lg">
+                    <span>🔒 {maskApiKey(geminiApiKey)}</span>
+                    <span className="text-[10px] text-emerald-300 font-sans font-semibold">
+                      {effectiveUid !== 'local_guest' ? 'AES-256 Synced' : 'Saved Locally'}
+                    </span>
+                  </div>
+                )}
                 <div className="flex gap-2">
                   <input
                     type="password"
                     placeholder="AIza..."
                     value={geminiApiKey}
                     onChange={(e) => setGeminiApiKey(e.target.value)}
-                    className="flex-1 px-3 py-1.5 bg-black/40 border border-white/15 rounded-lg text-xs text-white placeholder-gray-500 focus:outline-none focus:border-indigo-400"
+                    className="flex-1 px-3 py-1.5 bg-black/40 border border-white/15 rounded-lg text-xs text-white placeholder-gray-500 focus:outline-none focus:border-indigo-400 font-mono"
                   />
                   <button
                     type="button"
                     onClick={() => {
-                      saveGeminiApiKey(geminiApiKey);
-                      showNotice(geminiApiKey.trim() ? 'Gemini API Key saved!' : 'Gemini API Key cleared');
+                      saveGeminiApiKey(geminiApiKey, effectiveUid);
+                      showNotice(
+                        geminiApiKey.trim()
+                          ? effectiveUid !== 'local_guest'
+                            ? '🔒 Key encrypted with AES-256 & synced!'
+                            : 'Gemini API Key saved!'
+                          : 'Gemini API Key cleared'
+                      );
                     }}
                     className="px-3 py-1.5 bg-indigo-600/80 hover:bg-indigo-600 text-white text-xs font-medium rounded-lg transition cursor-pointer"
                   >

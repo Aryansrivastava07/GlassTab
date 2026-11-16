@@ -2,9 +2,7 @@ import { doc, getDoc, setDoc, increment, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase';
 import { getGeminiApiKey, saveGeminiApiKey } from './aiWidgetService';
 
-// Built-in starter demo key fallback for the first 10 trial messages
-const DEMO_STARTER_KEY = 'AIzaSyAM_jXOZ4Na4FqxySLpGwMyaXx-ePntF44';
-
+// Safe local & encrypted cloud-synced Gemini AI Key
 export const FREE_TRIAL_LIMIT = 10;
 const getTrialStorageKey = (uid) => `landing_ai_trial_count_${uid || 'guest'}`;
 const CUSTOM_CHARACTERS_STORAGE_KEY = 'landing_ai_custom_characters';
@@ -278,21 +276,11 @@ export const sendAiMessage = async ({
   const userKey = getGeminiApiKey();
   const hasCustomKey = Boolean(userKey && userKey.trim().length > 10);
 
-  if ((!userId || userId === 'local_guest') && !hasCustomKey) {
-    throw new Error('SIGN_IN_REQUIRED');
+  if (!hasCustomKey) {
+    throw new Error('MISSING_API_KEY');
   }
 
-  const usage = getFreeTrialUsage(userId);
-  if (usage.isExhausted && !hasCustomKey) {
-    throw new Error('TRIAL_EXHAUSTED');
-  }
-
-  const activeApiKey = hasCustomKey ? userKey.trim() : DEMO_STARTER_KEY;
-
-  if (!activeApiKey) {
-    throw new Error('Please add a free Google Gemini API key to start chatting.');
-  }
-
+  const activeApiKey = userKey.trim();
   let lastError = null;
 
   // 1. PRIMARY: Modern Gemini Interactions API (Native endpoint for gemini-3.8-flash)
@@ -449,10 +437,19 @@ export const sendAiMessage = async ({
     }
   }
 
-  const isCustomKey = Boolean(userKey && userKey.trim().length > 10);
-  const hint = isCustomKey
-    ? 'Please check your Gemini API key in Google AI Studio.'
-    : 'The starter trial key is rate-limited. Please add your own free Gemini API key to chat.';
+  if (
+    lastError?.message &&
+    (lastError.message.includes('leaked') ||
+      lastError.message.includes('API_KEY_INVALID') ||
+      lastError.message.includes('API key not valid'))
+  ) {
+    throw new Error(
+      'Your Gemini API key was rejected by Google. Please click "Add / Update API Key" to verify or enter a new free key from Google AI Studio.'
+    );
+  }
 
-  throw new Error(`${lastError?.message || 'Failed to generate response.'} (${hint})`);
+  throw new Error(
+    lastError?.message ||
+      'Failed to generate response. Please check your Gemini API key in Google AI Studio.'
+  );
 };

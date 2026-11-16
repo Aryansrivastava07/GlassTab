@@ -1,12 +1,12 @@
-import { doc, getDoc, setDoc, increment, onSnapshot } from 'firebase/firestore';
-import { db } from '../firebase';
-import { getGeminiApiKey, saveGeminiApiKey } from './aiWidgetService';
+import { getGeminiApiKey } from './aiWidgetService';
 
-// Safe local & encrypted cloud-synced Gemini AI Key
-export const FREE_TRIAL_LIMIT = 10;
-const getTrialStorageKey = (uid) => `landing_ai_trial_count_${uid || 'guest'}`;
 const CUSTOM_CHARACTERS_STORAGE_KEY = 'landing_ai_custom_characters';
 const CHAT_THREADS_STORAGE_KEY = 'landing_ai_chat_threads';
+
+export const hasConfiguredGeminiKey = () => {
+  const key = getGeminiApiKey();
+  return Boolean(key && key.trim().length > 10);
+};
 
 export const DEFAULT_CHARACTERS = [
   {
@@ -31,145 +31,16 @@ Rules:
   },
 ];
 
-// --- FREE TRIAL USAGE HELPERS (FIREBASE CLOUD-SYNCED & PERSISTED) ---
-export const getFreeTrialUsage = (userId = null) => {
-  const customKey = getGeminiApiKey();
-  const hasCustomKey = Boolean(customKey && customKey.trim().length > 10);
-  const isAnonymous = !userId || userId === 'local_guest';
+// Legacy compatibility helper
+export const getFreeTrialUsage = () => ({
+  hasCustomKey: hasConfiguredGeminiKey(),
+  isLocked: false,
+  isExhausted: false,
+});
 
-  // Guest/non-logged-in users cannot access free trial
-  if (isAnonymous) {
-    return {
-      count: 0,
-      max: FREE_TRIAL_LIMIT,
-      hasCustomKey,
-      isLocked: true,
-      isExhausted: true,
-      remaining: 0,
-    };
-  }
-
-  try {
-    const raw = localStorage.getItem(getTrialStorageKey(userId));
-    // Check legacy storage key if account-specific key is not populated yet
-    const legacyRaw = localStorage.getItem('landing_ai_trial_count');
-    const localParsed = raw ? parseInt(raw, 10) : (legacyRaw ? parseInt(legacyRaw, 10) : 0);
-    const count = Math.max(0, localParsed || 0);
-
-    return {
-      count,
-      max: FREE_TRIAL_LIMIT,
-      hasCustomKey,
-      isLocked: false,
-      isExhausted: !hasCustomKey && count >= FREE_TRIAL_LIMIT,
-      remaining: hasCustomKey ? Infinity : Math.max(0, FREE_TRIAL_LIMIT - count),
-    };
-  } catch {
-    return {
-      count: 0,
-      max: FREE_TRIAL_LIMIT,
-      hasCustomKey,
-      isLocked: false,
-      isExhausted: false,
-      remaining: FREE_TRIAL_LIMIT,
-    };
-  }
-};
-
-/**
- * Synchronizes the user's trial usage with Cloud Firestore.
- * Ensures cross-browser consistency (same Google account in Chrome, Edge, etc. shares the 10 messages).
- */
-export const subscribeToAccountAiTrialUsage = (userId, callback) => {
-  if (!userId || userId === 'local_guest') {
-    callback(getFreeTrialUsage(null));
-    return () => {};
-  }
-
-  // 1. Immediately emit with current local/cached usage
-  callback(getFreeTrialUsage(userId));
-
-  let unsubscribe = () => {};
-  try {
-    const userDocRef = doc(db, 'users', userId);
-    unsubscribe = onSnapshot(
-      userDocRef,
-      (snap) => {
-        if (snap.exists()) {
-          const data = snap.data();
-          const cloudCount = typeof data?.aiTrialCount === 'number' ? data.aiTrialCount : 0;
-          const currentLocal = getFreeTrialUsage(userId).count;
-          const resolvedCount = Math.max(cloudCount, currentLocal);
-
-          try {
-            localStorage.setItem(getTrialStorageKey(userId), String(resolvedCount));
-          } catch {
-            // ignore
-          }
-
-          // If local was higher than cloud (e.g. offline usage), back-propagate to Firestore
-          if (currentLocal > cloudCount) {
-            setDoc(userDocRef, { aiTrialCount: currentLocal }, { merge: true }).catch(() => {});
-          }
-        }
-        callback(getFreeTrialUsage(userId));
-      },
-      (err) => {
-        console.warn('Firestore AI trial snapshot warning:', err.message);
-      }
-    );
-  } catch (err) {
-    console.warn('Could not attach Firestore trial listener:', err);
-  }
-
-  return () => unsubscribe();
-};
-
-/**
- * Atomically increments the user's trial usage in Cloud Firestore and local storage.
- */
-export const incrementFreeTrialUsage = async (userId) => {
-  if (!userId || userId === 'local_guest') {
-    throw new Error('SIGN_IN_REQUIRED');
-  }
-
-  const current = getFreeTrialUsage(userId);
-  if (current.hasCustomKey) return current;
-
-  const nextCount = current.count + 1;
-  try {
-    localStorage.setItem(getTrialStorageKey(userId), String(nextCount));
-  } catch {
-    // ignore
-  }
-
-  // Atomically increment in Cloud Firestore under /users/{userId}
-  try {
-    const userDocRef = doc(db, 'users', userId);
-    await setDoc(
-      userDocRef,
-      {
-        aiTrialCount: increment(1),
-        updatedAt: new Date().toISOString(),
-      },
-      { merge: true }
-    );
-  } catch (err) {
-    console.warn('Failed to sync trial increment to Firestore:', err.message);
-  }
-
-  const updatedUsage = {
-    ...current,
-    count: nextCount,
-    isExhausted: nextCount >= FREE_TRIAL_LIMIT,
-    remaining: Math.max(0, FREE_TRIAL_LIMIT - nextCount),
-  };
-
-  if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent('landing_ai_trial_updated', { detail: updatedUsage }));
-  }
-
-  return updatedUsage;
+export const subscribeToAccountAiTrialUsage = (_uid, callback) => {
+  callback(getFreeTrialUsage());
+  return () => {};
 };
 
 // --- CUSTOM CHARACTERS HELPERS ---
@@ -348,10 +219,6 @@ export const sendAiMessage = async ({
 
       const grounding = data?.groundingMetadata?.groundingChunks || null;
 
-      if (!usage.hasCustomKey) {
-        await incrementFreeTrialUsage(userId);
-      }
-
       return {
         text: replyText.trim(),
         modelUsed: modelName,
@@ -421,10 +288,6 @@ export const sendAiMessage = async ({
       }
 
       const grounding = data?.candidates?.[0]?.groundingMetadata?.groundingChunks || null;
-
-      if (!usage.hasCustomKey) {
-        await incrementFreeTrialUsage(userId);
-      }
 
       return {
         text: reply.trim(),

@@ -36,8 +36,7 @@ import {
   createNewThread,
   deleteChatThread,
   renameChatThread,
-  getFreeTrialUsage,
-  subscribeToAccountAiTrialUsage,
+  hasConfiguredGeminiKey,
   sendAiMessage,
 } from '../services/aiChatService';
 import { getGeminiApiKey, saveGeminiApiKey, maskApiKey, subscribeToCloudGeminiKey } from '../services/aiWidgetService';
@@ -203,30 +202,25 @@ export const GlassAIStudio = ({ onScrollToDashboard }) => {
   const [apiKeyInput, setApiKeyInput] = useState(() => getGeminiApiKey());
   const [showKeyPassword, setShowKeyPassword] = useState(false);
   const [apiKeyNotice, setApiKeyNotice] = useState('');
-  const [trialUsage, setTrialUsage] = useState(() => getFreeTrialUsage(effectiveUid));
+  const [hasKey, setHasKey] = useState(() => hasConfiguredGeminiKey());
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
-  const isUnlocked = isSignedIn || Boolean(trialUsage.hasCustomKey);
+  const isUnlocked = true;
 
-  // Subscribe to real-time Cloud Firestore trial usage & encrypted Gemini key
+  // Subscribe to real-time Cloud Firestore encrypted Gemini key
   useEffect(() => {
-    const unsubTrial = subscribeToAccountAiTrialUsage(effectiveUid, (usage) => {
-      setTrialUsage(usage);
-    });
     const unsubKey = subscribeToCloudGeminiKey(effectiveUid, (cloudKey) => {
       if (cloudKey) setApiKeyInput(cloudKey);
-      setTrialUsage(getFreeTrialUsage(effectiveUid));
+      setHasKey(Boolean(cloudKey && cloudKey.trim().length > 10));
     });
 
     const onKeyChanged = (e) => {
-      if (e.detail?.key !== undefined) {
-        setApiKeyInput(e.detail.key);
-      }
-      setTrialUsage(getFreeTrialUsage(effectiveUid));
+      const k = e.detail?.key !== undefined ? e.detail.key : getGeminiApiKey();
+      setApiKeyInput(k);
+      setHasKey(Boolean(k && k.trim().length > 10));
     };
     window.addEventListener('landing_gemini_key_changed', onKeyChanged);
 
     return () => {
-      unsubTrial();
       unsubKey();
       window.removeEventListener('landing_gemini_key_changed', onKeyChanged);
     };
@@ -395,7 +389,7 @@ export const GlassAIStudio = ({ onScrollToDashboard }) => {
   const handleSaveApiKey = async (e) => {
     e.preventDefault();
     await saveGeminiApiKey(apiKeyInput.trim(), effectiveUid);
-    setTrialUsage(getFreeTrialUsage(effectiveUid));
+    setHasKey(Boolean(apiKeyInput.trim().length > 10));
     setApiKeyNotice(
       isSignedIn
         ? '🔒 Encrypted with AES-256 and synced to your Google Account!'
@@ -410,7 +404,7 @@ export const GlassAIStudio = ({ onScrollToDashboard }) => {
   const handleRemoveApiKey = async () => {
     await saveGeminiApiKey('', effectiveUid);
     setApiKeyInput('');
-    setTrialUsage(getFreeTrialUsage(effectiveUid));
+    setHasKey(false);
     setApiKeyNotice('API Key removed.');
     setTimeout(() => {
       setApiKeyNotice('');
@@ -418,19 +412,13 @@ export const GlassAIStudio = ({ onScrollToDashboard }) => {
   };
 
   const handleSendMessage = async (customPrompt = null) => {
-    if (!isUnlocked) {
-      setSignInError('Please sign in with Google to start chatting with AI companions.');
+    if (!hasKey) {
+      setShowApiKeyModal(true);
       return;
     }
 
     const textToSend = (customPrompt || inputMessage).trim();
     if (!textToSend || isGenerating) return;
-
-    const currentUsage = getFreeTrialUsage(effectiveUid);
-    if (currentUsage.isExhausted && !currentUsage.hasCustomKey) {
-      setShowApiKeyModal(true);
-      return;
-    }
 
     if (!customPrompt) setInputMessage('');
 
@@ -500,11 +488,8 @@ export const GlassAIStudio = ({ onScrollToDashboard }) => {
 
       setThreads(finalThreads);
       saveChatThreads(finalThreads);
-      setTrialUsage(getFreeTrialUsage(effectiveUid));
     } catch (err) {
-      if (err.message === 'SIGN_IN_REQUIRED') {
-        setSignInError('Sign in with Google to use AI Studio.');
-      } else if (err.message === 'TRIAL_EXHAUSTED' || err.message === 'MISSING_API_KEY') {
+      if (err.message === 'MISSING_API_KEY') {
         setShowApiKeyModal(true);
       } else {
         const errorMsg = {
@@ -641,61 +626,51 @@ export const GlassAIStudio = ({ onScrollToDashboard }) => {
           )}
         </div>
 
-        {/* Sidebar Footer: Fair-Use Trial Counter & Key Status */}
+        {/* Sidebar Footer: Gemini API Key Status */}
         <div className="p-3.5 border-t border-white/10 bg-black/20 space-y-2">
-          {!isSignedIn ? (
-            <div className="p-3 rounded-2xl bg-gradient-to-br from-indigo-500/10 to-sky-500/10 border border-sky-400/25 space-y-2 text-center">
-              <div className="flex items-center justify-center gap-1.5 text-xs font-semibold text-white">
-                <Lock size={13} className="text-sky-400" />
-                <span>Account Required</span>
+          {hasKey ? (
+            <div className="flex items-center justify-between p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-[11px] text-emerald-300">
+              <span className="flex items-center gap-1.5 font-medium">
+                <ShieldCheck size={14} className="text-emerald-400" />
+                {isSignedIn ? 'AES-256 Cloud Synced' : 'Gemini Key Active'}
+              </span>
+              <button
+                onClick={() => setShowApiKeyModal(true)}
+                className="text-[10px] text-emerald-400 underline hover:text-emerald-200 cursor-pointer font-medium"
+              >
+                Manage
+              </button>
+            </div>
+          ) : (
+            <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 space-y-1.5 text-left">
+              <div className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-300">
+                <KeyRound size={13} className="text-amber-400" />
+                <span>Gemini API Key Required</span>
               </div>
-              <p className="text-[10px] text-gray-300 leading-tight">
-                Sign in with Google to get 10 free messages synced to your account.
+              <p className="text-[10px] text-gray-400 leading-tight">
+                Add your free key from Google AI Studio to unlock unlimited chats.
               </p>
+              <button
+                onClick={() => setShowApiKeyModal(true)}
+                className="w-full py-1.5 text-[10px] bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-white rounded-lg font-semibold flex items-center justify-center gap-1 transition cursor-pointer shadow-md shadow-amber-500/10"
+              >
+                <KeyRound size={11} />
+                <span>Add Free Key (Takes 30s)</span>
+              </button>
+            </div>
+          )}
+
+          {!isSignedIn && (
+            <div className="text-[10px] text-gray-400 text-center pt-0.5">
               <button
                 type="button"
                 onClick={handleGoogleSignIn}
                 disabled={isSigningIn}
-                className="w-full py-1.5 px-2.5 rounded-xl bg-white hover:bg-gray-100 text-gray-900 font-semibold text-[11px] flex items-center justify-center gap-1.5 shadow-md transition cursor-pointer active:scale-95 disabled:opacity-50"
+                className="text-sky-400 hover:text-sky-300 underline font-medium cursor-pointer"
               >
-                <span>{isSigningIn ? 'Signing In...' : 'Sign in with Google'}</span>
+                {isSigningIn ? 'Signing In...' : 'Sign in with Google'}
               </button>
-            </div>
-          ) : trialUsage.hasCustomKey ? (
-            <div className="flex items-center justify-between p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-[11px] text-emerald-300">
-              <span className="flex items-center gap-1.5 font-medium">
-                <ShieldCheck size={14} className="text-emerald-400" />
-                Unlimited API Active
-              </span>
-              <button
-                onClick={() => setShowApiKeyModal(true)}
-                className="text-[10px] text-emerald-400 underline hover:text-emerald-200 cursor-pointer"
-              >
-                Edit Key
-              </button>
-            </div>
-          ) : (
-            <div className="p-2.5 rounded-xl bg-white/5 border border-white/10 space-y-1.5">
-              <div className="flex items-center justify-between text-[11px]">
-                <span className="text-gray-300 font-medium">Free Trial Messages</span>
-                <span className="font-mono text-sky-400 font-bold">
-                  {trialUsage.count} / {trialUsage.max}
-                </span>
-              </div>
-              {/* Progress bar */}
-              <div className="w-full h-1.5 bg-black/40 rounded-full overflow-hidden border border-white/10">
-                <div
-                  className="h-full bg-gradient-to-r from-sky-400 to-blue-500 transition-all duration-300"
-                  style={{ width: `${Math.min(100, (trialUsage.count / trialUsage.max) * 100)}%` }}
-                />
-              </div>
-              <button
-                onClick={() => setShowApiKeyModal(true)}
-                className="w-full py-1 text-[10px] bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border border-sky-400/20 rounded-lg font-medium flex items-center justify-center gap-1 transition cursor-pointer"
-              >
-                <KeyRound size={11} />
-                <span>Add Free Gemini Key for Unlimited</span>
-              </button>
+              <span> to sync across devices</span>
             </div>
           )}
         </div>
@@ -804,128 +779,16 @@ export const GlassAIStudio = ({ onScrollToDashboard }) => {
         {/* Message Stream Area */}
         <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
           
-          {/* Guest Lock Screen: Require Google sign-in to chat and claim 10 free messages */}
-          {!isUnlocked ? (
-            <div className="h-full min-h-[380px] flex items-center justify-center p-4 animate-fadeIn">
-              <div className="max-w-md w-full p-6 sm:p-8 rounded-3xl bg-slate-900/80 border border-white/15 backdrop-blur-2xl text-center space-y-5 shadow-2xl">
-                <div className="w-16 h-16 rounded-3xl bg-gradient-to-tr from-sky-500/20 to-indigo-500/20 border border-sky-400/30 flex items-center justify-center text-sky-400 mx-auto shadow-xl shadow-sky-500/10">
-                  <Lock size={28} />
-                </div>
-
-                <div className="space-y-2">
-                  <h3 className="text-xl font-bold text-white tracking-tight">
-                    Sign in to Unlock AI Studio
-                  </h3>
-                  <p className="text-xs text-gray-300 leading-relaxed max-w-sm mx-auto">
-                    Sign in to get <strong className="text-sky-300">10 free AI chats</strong> powered by Gemini 2.5 Flash with live Google Search. Your trial is securely synced to your account across devices.
-                  </p>
-                </div>
-
-                {signInError && (
-                  <div className="p-2.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-200 text-xs text-left leading-relaxed flex items-center gap-2 animate-fadeIn">
-                    <AlertCircle size={15} className="text-amber-400 shrink-0" />
-                    <span>{signInError}</span>
-                  </div>
-                )}
-
-                <div className="space-y-2.5 pt-1">
-                  <button
-                    type="button"
-                    onClick={handleGoogleSignIn}
-                    disabled={isSigningIn}
-                    className="w-full py-3 px-4 rounded-2xl bg-white hover:bg-gray-100 text-gray-900 font-semibold text-sm flex items-center justify-center gap-2.5 shadow-lg transition cursor-pointer active:scale-95 disabled:opacity-50"
-                  >
-                    <svg className="w-4 h-4" viewBox="0 0 24 24">
-                      <path
-                        fill="#4285F4"
-                        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                      />
-                      <path
-                        fill="#34A853"
-                        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                      />
-                      <path
-                        fill="#FBBC05"
-                        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                      />
-                      <path
-                        fill="#EA4335"
-                        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                      />
-                    </svg>
-                    <span>{isSigningIn ? 'Connecting to Google...' : 'Continue with Google'}</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setShowEmailAuth(!showEmailAuth)}
-                    className="w-full py-1 text-xs text-gray-400 hover:text-white transition cursor-pointer text-center"
-                  >
-                    {showEmailAuth ? 'Hide email sign-in' : 'Or sign in / register with Email'}
-                  </button>
-
-                  {showEmailAuth && (
-                    <form onSubmit={handleEmailAuthSubmit} className="p-3 bg-white/5 border border-white/10 rounded-xl space-y-2 text-left animate-fadeIn">
-                      <div className="flex justify-between items-center text-xs">
-                        <span className="font-semibold text-white">{isRegistering ? 'Create Account' : 'Email Sign In'}</span>
-                        <button
-                          type="button"
-                          onClick={() => setIsRegistering(!isRegistering)}
-                          className="text-sky-400 hover:text-sky-300 text-[11px] underline cursor-pointer"
-                        >
-                          {isRegistering ? 'Have an account? Sign In' : 'Sign Up'}
-                        </button>
-                      </div>
-                      <input
-                        type="email"
-                        required
-                        placeholder="Email address"
-                        value={emailInput}
-                        onChange={(e) => setEmailInput(e.target.value)}
-                        className="w-full px-3 py-1.5 bg-black/40 border border-white/15 rounded-lg text-xs text-white placeholder-gray-500 focus:outline-none focus:border-sky-400"
-                      />
-                      <input
-                        type="password"
-                        required
-                        minLength={6}
-                        placeholder="Password (min 6 characters)"
-                        value={passwordInput}
-                        onChange={(e) => setPasswordInput(e.target.value)}
-                        className="w-full px-3 py-1.5 bg-black/40 border border-white/15 rounded-lg text-xs text-white placeholder-gray-500 focus:outline-none focus:border-sky-400"
-                      />
-                      <button
-                        type="submit"
-                        disabled={isEmailSubmitting}
-                        className="w-full py-2 bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-500 hover:to-indigo-500 text-white rounded-lg text-xs font-semibold shadow transition cursor-pointer disabled:opacity-50"
-                      >
-                        {isEmailSubmitting ? 'Please wait...' : (isRegistering ? 'Create Account & Unlock' : 'Sign In & Unlock')}
-                      </button>
-                    </form>
-                  )}
-
-                  <button
-                    type="button"
-                    onClick={() => setShowApiKeyModal(true)}
-                    className="w-full py-2 px-3 text-xs text-sky-400 hover:text-sky-300 font-medium flex items-center justify-center gap-1.5 transition cursor-pointer"
-                  >
-                    <KeyRound size={13} />
-                    <span>Have a Gemini API key? Unlock unlimited chat</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <>
-              {/* Trial Exhausted Inline Banner */}
-              {trialUsage.isExhausted && !trialUsage.hasCustomKey && (
+          {/* Missing API Key Banner */}
+              {!hasKey && (
                 <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/25 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-amber-200 animate-fadeIn shadow-lg">
                   <div className="flex items-center gap-2.5">
-                    <Sparkles size={16} className="text-amber-400 shrink-0" />
-                    <span>You&apos;ve used all 10 free trial messages on this account. Add your own free key for unlimited chats!</span>
+                    <KeyRound size={16} className="text-amber-400 shrink-0" />
+                    <span>Add your free Google Gemini API key to start chatting with {activeCharacter.name}.</span>
                   </div>
                   <button
                     onClick={() => setShowApiKeyModal(true)}
-                    className="px-3.5 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-900 font-semibold rounded-xl text-xs shrink-0 transition cursor-pointer active:scale-95"
+                    className="px-3.5 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-white font-semibold rounded-xl text-xs shrink-0 transition cursor-pointer active:scale-95 shadow-md shadow-amber-500/20"
                   >
                     Add Free Key
                   </button>
@@ -1037,10 +900,7 @@ export const GlassAIStudio = ({ onScrollToDashboard }) => {
                   </div>
                 </div>
               )}
-            </>
-          )}
-
-          <div ref={messagesEndRef} />
+            <div ref={messagesEndRef} />
         </div>
 
         {/* Input Bar */}
@@ -1050,15 +910,13 @@ export const GlassAIStudio = ({ onScrollToDashboard }) => {
             {/* Voice Dictation Button */}
             <button
               onClick={toggleListening}
-              disabled={!isUnlocked}
+              
               className={`p-2 rounded-xl transition cursor-pointer ${
-                !isUnlocked
-                  ? 'opacity-30 cursor-not-allowed text-gray-500'
-                  : isListening
+                isListening
                   ? 'bg-red-500 text-white animate-pulse'
                   : 'text-gray-400 hover:text-white hover:bg-white/10'
               }`}
-              title={!isUnlocked ? 'Sign in to use voice dictation' : (isListening ? 'Stop listening' : 'Speak message')}
+              title={isListening ? "Stop listening" : "Speak message"}
             >
               {isListening ? <MicOff size={16} /> : <Mic size={16} />}
             </button>
@@ -1067,7 +925,7 @@ export const GlassAIStudio = ({ onScrollToDashboard }) => {
             <textarea
               rows={1}
               value={inputMessage}
-              disabled={!isUnlocked || isGenerating}
+              disabled={isGenerating}
               onChange={(e) => setInputMessage(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
@@ -1076,10 +934,8 @@ export const GlassAIStudio = ({ onScrollToDashboard }) => {
                 }
               }}
               placeholder={
-                !isUnlocked
-                  ? "Sign in with Google to start chatting with AI companions..."
-                  : trialUsage.isExhausted && !trialUsage.hasCustomKey
-                  ? "Trial limit reached (10/10) - add a Gemini API key to continue..."
+                !hasKey
+                  ? `Add a free Gemini API key to chat with ${activeCharacter.name}...`
                   : `Ask ${activeCharacter.name}... (Press Enter to send, Shift+Enter for newline)`
               }
               className="flex-1 bg-transparent text-white placeholder-gray-500 text-xs sm:text-sm focus:outline-none resize-none max-h-32 leading-relaxed disabled:opacity-40 disabled:cursor-not-allowed"
@@ -1088,7 +944,7 @@ export const GlassAIStudio = ({ onScrollToDashboard }) => {
             {/* Send Button */}
             <button
               onClick={() => handleSendMessage()}
-              disabled={!isUnlocked || !inputMessage.trim() || isGenerating || (trialUsage.isExhausted && !trialUsage.hasCustomKey)}
+              disabled={!inputMessage.trim() || isGenerating}
               className="p-2.5 rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 disabled:opacity-30 disabled:cursor-not-allowed text-white shadow-md shadow-sky-500/20 transition cursor-pointer active:scale-95"
             >
               <Send size={15} />
@@ -1184,7 +1040,7 @@ export const GlassAIStudio = ({ onScrollToDashboard }) => {
         </div>
       )}
 
-      {/* ================= MODAL 2: 10-MESSAGE TRIAL GATE & API KEY SETUP ================= */}
+      {/* ================= MODAL 2: API KEY SETUP ================= */}
       {showApiKeyModal && (
         <div className="fixed inset-0 z-[100000] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
           <div className="w-full max-w-md bg-[#121622] border border-white/15 rounded-3xl p-6 shadow-2xl space-y-4 text-center">
@@ -1202,7 +1058,7 @@ export const GlassAIStudio = ({ onScrollToDashboard }) => {
             </div>
 
             {/* Currently Active Masked Key Display */}
-            {trialUsage.hasCustomKey && (
+            {hasKey && (
               <div className="p-3 bg-emerald-500/10 border border-emerald-500/25 rounded-2xl text-left space-y-1.5">
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] font-semibold text-emerald-300 flex items-center gap-1.5">
@@ -1233,7 +1089,7 @@ export const GlassAIStudio = ({ onScrollToDashboard }) => {
             <form onSubmit={handleSaveApiKey} className="space-y-3 text-left">
               <div>
                 <label className="text-[11px] text-gray-300 block mb-1 font-medium">
-                  {trialUsage.hasCustomKey ? 'Replace API Key' : 'Paste Your Gemini API Key'}
+                  {hasKey ? 'Replace API Key' : 'Paste Your Gemini API Key'}
                 </label>
                 <div className="relative">
                   <input

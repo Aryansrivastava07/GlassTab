@@ -988,7 +988,7 @@ export const generateWidgetWithGemini = async ({
     height,
   });
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/interactions?key=${encodeURIComponent(
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(
     apiKey.trim()
   )}`;
 
@@ -996,8 +996,11 @@ export const generateWidgetWithGemini = async ({
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: 'gemini-3.8-flash',
-      input: prompt,
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: {
+        temperature: 0.2,
+        maxOutputTokens: 3000,
+      },
     }),
   });
 
@@ -1007,17 +1010,7 @@ export const generateWidgetWithGemini = async ({
   }
 
   const data = await res.json();
-
-  let text = '';
-  if (Array.isArray(data?.steps)) {
-    const modelSteps = data.steps.filter((s) => s.type === 'model_output');
-    const lastStep = modelSteps[modelSteps.length - 1];
-    const textPart = lastStep?.content?.find((c) => c.type === 'text');
-    text = textPart?.text || '';
-  } else if (Array.isArray(data?.outputs)) {
-    const textOutputs = data.outputs.filter((o) => o.type === 'text');
-    text = textOutputs[textOutputs.length - 1]?.text || '';
-  }
+  let text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
 
   if (!text.trim()) {
     throw new Error('Gemini returned empty response. Try refining your prompt.');

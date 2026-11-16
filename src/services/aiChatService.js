@@ -31,7 +31,7 @@ Rules:
   },
 ];
 
-// Legacy compatibility helper
+// Legacy compatibility helpers
 export const getFreeTrialUsage = () => ({
   hasCustomKey: hasConfiguredGeminiKey(),
   isLocked: false,
@@ -136,7 +136,37 @@ export const renameChatThread = (threadId, newTitle) => {
   return threads;
 };
 
-// --- GEMINI API CALLER ---
+// --- GEMINI API CALLER WITH TIMEOUT PROTECTION ---
+const CANDIDATE_MODELS = [
+  'gemini-2.5-flash',
+  'gemini-2.0-flash',
+  'gemini-1.5-flash',
+  'gemini-2.5-flash-lite',
+];
+
+/**
+ * Fetch with an explicit timeout so requests never hang indefinitely.
+ */
+async function fetchWithTimeout(url, options, timeoutMs = 15000) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    return response;
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      throw new Error(`Request timed out after ${timeoutMs / 1000}s`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 export const sendAiMessage = async ({
   userId,
   character,
@@ -154,91 +184,9 @@ export const sendAiMessage = async ({
   const activeApiKey = userKey.trim();
   let lastError = null;
 
-  // 1. PRIMARY: Modern Gemini Interactions API (Native endpoint for gemini-3.8-flash)
-  const interactionModels = ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.5-flash-lite'];
-
-  // Format multi-turn transcript for input
-  let interactionInput = userMessage.trim();
-  if (history && history.length > 0) {
-    const transcript = history
-      .slice(-12)
-      .map((msg) => `${msg.role === 'user' ? 'User' : (character?.name || 'Assistant')}: ${msg.text}`)
-      .join('\n\n');
-    interactionInput = `${transcript}\n\nUser: ${userMessage.trim()}\n\n${character?.name || 'Assistant'}:`;
-  }
-
-  for (const modelName of interactionModels) {
-    try {
-      const endpoint = `https://generativelanguage.googleapis.com/v1beta/interactions?key=${encodeURIComponent(activeApiKey)}`;
-      const payload = {
-        model: modelName,
-        input: interactionInput,
-      };
-
-      if (character?.systemPrompt) {
-        payload.system_instruction = character.systemPrompt;
-      }
-
-      if (useWebSearch) {
-        payload.tools = [{ type: 'google_search' }];
-      }
-
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-goog-api-key': activeApiKey,
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData?.error?.message || `Interactions API error ${res.status}`);
-      }
-
-      const data = await res.json();
-      let replyText = '';
-
-      if (Array.isArray(data?.steps)) {
-        const modelSteps = data.steps.filter((s) => s.type === 'model_output');
-        const lastStep = modelSteps[modelSteps.length - 1];
-        const textPart = lastStep?.content?.find((c) => c.type === 'text');
-        replyText = textPart?.text || '';
-      } else if (Array.isArray(data?.outputs)) {
-        const textOutputs = data.outputs.filter((o) => o.type === 'text');
-        replyText = textOutputs[textOutputs.length - 1]?.text || '';
-      }
-
-      if (!replyText && typeof data?.outputText === 'string') replyText = data.outputText;
-      if (!replyText && typeof data?.output_text === 'string') replyText = data.output_text;
-
-      if (!replyText || !replyText.trim()) {
-        throw new Error('Empty response from model.');
-      }
-
-      const grounding = data?.groundingMetadata?.groundingChunks || null;
-
-      return {
-        text: replyText.trim(),
-        modelUsed: modelName,
-        groundingChunks: Array.isArray(grounding) ? grounding : null,
-      };
-    } catch (err) {
-      console.warn(`Interactions model ${modelName} failed:`, err.message);
-      lastError = err;
-    }
-  }
-
-  // 2. SECONDARY: Classic generateContent API (Fallback for keys limited to generateContent)
-  const generateContentModels = [
-    'gemini-3.8-flash',
-    'gemini-2.5-flash',
-    'gemini-2.0-flash',
-    'gemini-3-flash-preview',
-  ];
+  // Build clean contents array
   const contents = [
-    ...history.slice(-14).map((msg) => ({
+    ...history.slice(-12).map((msg) => ({
       role: msg.role === 'user' ? 'user' : 'model',
       parts: [{ text: msg.text || '' }],
     })),
@@ -248,7 +196,7 @@ export const sendAiMessage = async ({
     },
   ];
 
-  const gcPayload = {
+  const payload = {
     contents,
     generationConfig: {
       temperature: 0.75,
@@ -257,27 +205,36 @@ export const sendAiMessage = async ({
   };
 
   if (character?.systemPrompt) {
-    gcPayload.system_instruction = {
+    payload.system_instruction = {
       parts: [{ text: character.systemPrompt }],
     };
   }
 
   if (useWebSearch) {
-    gcPayload.tools = [{ google_search: {} }];
+    payload.tools = [{ google_search: {} }];
   }
 
-  for (const modelName of generateContentModels) {
+  // Iterate through supported Google AI Studio models
+  for (const modelName of CANDIDATE_MODELS) {
     try {
       const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${encodeURIComponent(activeApiKey)}`;
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(gcPayload),
-      });
+      
+      const res = await fetchWithTimeout(
+        endpoint,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+        },
+        12000 // 12 seconds per candidate
+      );
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData?.error?.message || `API error ${res.status}`);
+        const apiErrMsg = errorData?.error?.message || `API error ${res.status}`;
+        throw new Error(apiErrMsg);
       }
 
       const data = await res.json();
@@ -295,8 +252,17 @@ export const sendAiMessage = async ({
         groundingChunks: Array.isArray(grounding) ? grounding : null,
       };
     } catch (err) {
-      console.warn(`generateContent model ${modelName} failed:`, err.message);
+      console.warn(`Gemini model ${modelName} failed:`, err.message);
       lastError = err;
+      // If key is reported as leaked or invalid, no need to retry other models with the same dead key
+      if (
+        err.message &&
+        (err.message.includes('leaked') ||
+          err.message.includes('API_KEY_INVALID') ||
+          err.message.includes('API key not valid'))
+      ) {
+        break;
+      }
     }
   }
 
@@ -307,12 +273,12 @@ export const sendAiMessage = async ({
       lastError.message.includes('API key not valid'))
   ) {
     throw new Error(
-      'Your Gemini API key was rejected by Google. Please click "Add / Update API Key" to verify or enter a new free key from Google AI Studio.'
+      'Your Gemini API key was rejected by Google as invalid or leaked. Please click "Add / Update API Key" to enter a fresh free key from Google AI Studio.'
     );
   }
 
   throw new Error(
     lastError?.message ||
-      'Failed to generate response. Please check your Gemini API key in Google AI Studio.'
+      'Failed to receive response from Gemini. Please verify your internet connection or API key.'
   );
 };

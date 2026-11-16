@@ -136,18 +136,8 @@ export const renameChatThread = (threadId, newTitle) => {
   return threads;
 };
 
-// --- GEMINI API CALLER WITH TIMEOUT PROTECTION ---
-const CANDIDATE_MODELS = [
-  'gemini-2.5-flash',
-  'gemini-2.0-flash',
-  'gemini-1.5-flash',
-  'gemini-2.5-flash-lite',
-];
-
-/**
- * Fetch with an explicit timeout so requests never hang indefinitely.
- */
-async function fetchWithTimeout(url, options, timeoutMs = 15000) {
+// --- TIMEOUT PROTECTION ---
+async function fetchWithTimeout(url, options, timeoutMs = 12000) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -167,6 +157,20 @@ async function fetchWithTimeout(url, options, timeoutMs = 15000) {
   }
 }
 
+// Current Gemini models (Gemini 3.5 & 3.8 family)
+const INTERACTION_MODELS = [
+  'gemini-3.5-flash-lite',
+  'gemini-3.8-flash',
+  'gemini-3.7-flash',
+];
+
+const GENERATE_CONTENT_MODELS = [
+  'gemini-3.5-flash-lite',
+  'gemini-3.8-flash',
+  'gemini-3.7-flash',
+  'gemini-3.5-flash',
+];
+
 export const sendAiMessage = async ({
   userId,
   character,
@@ -184,7 +188,100 @@ export const sendAiMessage = async ({
   const activeApiKey = userKey.trim();
   let lastError = null;
 
-  // Build clean contents array
+  // 1. PRIMARY: Try modern Interactions API (Google recommended)
+  const formattedHistory = history
+    .slice(-12)
+    .map((msg) => `${msg.role === 'user' ? 'User' : (character?.name || 'Assistant')}: ${msg.text}`)
+    .join('\n\n');
+  const interactionInput = formattedHistory
+    ? `${formattedHistory}\n\nUser: ${userMessage.trim()}\n\n${character?.name || 'Assistant'}:`
+    : userMessage.trim();
+
+  for (const modelName of INTERACTION_MODELS) {
+    try {
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/interactions?key=${encodeURIComponent(activeApiKey)}`;
+      const payload = {
+        model: modelName,
+        input: interactionInput,
+      };
+
+      if (character?.systemPrompt) {
+        payload.system_instruction = character.systemPrompt;
+      }
+
+      if (useWebSearch) {
+        payload.tools = [{ type: 'google_search' }];
+      }
+
+      const res = await fetchWithTimeout(
+        endpoint,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-goog-api-key': activeApiKey,
+            'Api-Revision': '2026-05-20',
+          },
+          body: JSON.stringify(payload),
+        },
+        12000
+      );
+
+      if (res.ok) {
+        const data = await res.json();
+        let replyText = '';
+
+        if (typeof data?.output_text === 'string' && data.output_text) {
+          replyText = data.output_text;
+        } else if (Array.isArray(data?.steps)) {
+          const modelSteps = data.steps.filter((s) => s.type === 'model_output');
+          const lastStep = modelSteps[modelSteps.length - 1];
+          const textPart = lastStep?.content?.find((c) => c.type === 'text');
+          replyText = textPart?.text || '';
+        } else if (Array.isArray(data?.outputs)) {
+          const textOutputs = data.outputs.filter((o) => o.type === 'text');
+          replyText = textOutputs[textOutputs.length - 1]?.text || '';
+        }
+
+        if (replyText && replyText.trim()) {
+          const grounding = data?.grounding_metadata?.grounding_chunks || null;
+          return {
+            text: replyText.trim(),
+            modelUsed: modelName,
+            groundingChunks: Array.isArray(grounding) ? grounding : null,
+          };
+        }
+      } else {
+        const errJson = await res.json().catch(() => ({}));
+        const errMsg = errJson?.error?.message || `Interactions API error ${res.status}`;
+        lastError = new Error(errMsg);
+
+        // Check for fatal credential rejection
+        if (
+          errMsg.includes('leaked') ||
+          errMsg.includes('API_KEY_INVALID') ||
+          errMsg.includes('API key not valid')
+        ) {
+          throw lastError;
+        }
+      }
+    } catch (err) {
+      if (
+        err.message &&
+        (err.message.includes('leaked') ||
+          err.message.includes('API_KEY_INVALID') ||
+          err.message.includes('API key not valid'))
+      ) {
+        throw new Error(
+          'Your Gemini API key was rejected by Google as leaked or invalid. Please click "Add / Update API Key" to enter a fresh free key from Google AI Studio.'
+        );
+      }
+      console.warn(`Interactions API with ${modelName} failed:`, err.message);
+      lastError = err;
+    }
+  }
+
+  // 2. SECONDARY: Fallback to generateContent API
   const contents = [
     ...history.slice(-12).map((msg) => ({
       role: msg.role === 'user' ? 'user' : 'model',
@@ -196,7 +293,7 @@ export const sendAiMessage = async ({
     },
   ];
 
-  const payload = {
+  const gcPayload = {
     contents,
     generationConfig: {
       temperature: 0.75,
@@ -205,20 +302,19 @@ export const sendAiMessage = async ({
   };
 
   if (character?.systemPrompt) {
-    payload.system_instruction = {
+    gcPayload.system_instruction = {
       parts: [{ text: character.systemPrompt }],
     };
   }
 
   if (useWebSearch) {
-    payload.tools = [{ google_search: {} }];
+    gcPayload.tools = [{ google_search: {} }];
   }
 
-  // Iterate through supported Google AI Studio models
-  for (const modelName of CANDIDATE_MODELS) {
+  for (const modelName of GENERATE_CONTENT_MODELS) {
     try {
       const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${encodeURIComponent(activeApiKey)}`;
-      
+
       const res = await fetchWithTimeout(
         endpoint,
         {
@@ -226,9 +322,9 @@ export const sendAiMessage = async ({
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify(payload),
+          body: JSON.stringify(gcPayload),
         },
-        12000 // 12 seconds per candidate
+        12000
       );
 
       if (!res.ok) {
@@ -252,33 +348,23 @@ export const sendAiMessage = async ({
         groundingChunks: Array.isArray(grounding) ? grounding : null,
       };
     } catch (err) {
-      console.warn(`Gemini model ${modelName} failed:`, err.message);
+      console.warn(`Gemini generateContent model ${modelName} failed:`, err.message);
       lastError = err;
-      // If key is reported as leaked or invalid, no need to retry other models with the same dead key
       if (
         err.message &&
         (err.message.includes('leaked') ||
           err.message.includes('API_KEY_INVALID') ||
           err.message.includes('API key not valid'))
       ) {
-        break;
+        throw new Error(
+          'Your Gemini API key was rejected by Google as leaked or invalid. Please click "Add / Update API Key" to enter a fresh free key from Google AI Studio.'
+        );
       }
     }
   }
 
-  if (
-    lastError?.message &&
-    (lastError.message.includes('leaked') ||
-      lastError.message.includes('API_KEY_INVALID') ||
-      lastError.message.includes('API key not valid'))
-  ) {
-    throw new Error(
-      'Your Gemini API key was rejected by Google as invalid or leaked. Please click "Add / Update API Key" to enter a fresh free key from Google AI Studio.'
-    );
-  }
-
   throw new Error(
     lastError?.message ||
-      'Failed to receive response from Gemini. Please verify your internet connection or API key.'
+      'Failed to receive response from Gemini. Please check your network or enter a fresh API key.'
   );
 };

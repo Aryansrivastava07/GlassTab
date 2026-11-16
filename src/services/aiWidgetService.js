@@ -966,7 +966,7 @@ Either return ONLY raw HTML/CSS/JS code (\`<style>...</style><div>...</div><scri
 };
 
 /**
- * Calls Google Gemini Interactions API (gemini-3.8-flash) using the user's configured API key.
+ * Calls Google Gemini API (gemini-3.5-flash-lite / gemini-3.8-flash) using the user's configured API key.
  */
 export const generateWidgetWithGemini = async ({
   apiKey,
@@ -988,45 +988,81 @@ export const generateWidgetWithGemini = async ({
     height,
   });
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(
-    apiKey.trim()
-  )}`;
+  const candidateModels = [
+    'gemini-3.5-flash-lite',
+    'gemini-3.8-flash',
+    'gemini-3.7-flash',
+    'gemini-3.5-flash',
+  ];
 
-  const res = await fetch(endpoint, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature: 0.2,
-        maxOutputTokens: 3000,
-      },
-    }),
-  });
+  let lastError = null;
 
-  if (!res.ok) {
-    const errData = await res.json().catch(() => ({}));
-    throw new Error(errData?.error?.message || `Gemini API error (${res.status})`);
+  for (const modelName of candidateModels) {
+    try {
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${encodeURIComponent(
+        apiKey.trim()
+      )}`;
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.2,
+            maxOutputTokens: 3000,
+          },
+        }),
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData?.error?.message || `Gemini API error (${res.status})`);
+      }
+
+      const data = await res.json();
+      let text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+      if (!text.trim()) {
+        throw new Error('Gemini returned empty response. Try refining your prompt.');
+      }
+
+      text = text
+        .replace(/^```(?:html|xml|json)?\s*\n?/i, '')
+        .replace(/\n?```\s*$/i, '')
+        .trim();
+
+      const rejected = parseAIUnsupportedResponse(text);
+      if (rejected) {
+        const err = new Error(rejected.reason);
+        err.isUnsupported = true;
+        throw err;
+      }
+
+      return {
+        code: text,
+        modelUsed: modelName,
+      };
+    } catch (err) {
+      console.warn(`Widget generation with ${modelName} failed:`, err.message);
+      lastError = err;
+      if (err.isUnsupported) throw err;
+      if (
+        err.message &&
+        (err.message.includes('leaked') ||
+          err.message.includes('API_KEY_INVALID') ||
+          err.message.includes('API key not valid'))
+      ) {
+        throw new Error('Your Gemini API key was rejected by Google as leaked or invalid.');
+      }
+    }
   }
 
-  const data = await res.json();
-  let text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-
-  if (!text.trim()) {
-    throw new Error('Gemini returned empty response. Try refining your prompt.');
-  }
-
-  text = text
-    .replace(/^```(?:html|xml|json)?\s*\n?/i, '')
-    .replace(/\n?```\s*$/i, '')
-    .trim();
-
-  const rejected = parseAIUnsupportedResponse(text);
-  if (rejected) {
-    const err = new Error(rejected.reason);
-    err.isUnsupported = true;
-    throw err;
-  }
-
-  return text;
+  throw new Error(lastError?.message || 'Failed to generate widget with Gemini.');
 };

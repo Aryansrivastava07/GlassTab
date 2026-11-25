@@ -18,6 +18,10 @@ import {
   getStoredLayout,
   saveStoredLayout,
   resetStoredLayout,
+  getViewportSize,
+  toViewportLayout,
+  toPixelLayout,
+  mergeWithDefaults,
 } from "./utils/layoutService";
 import {
   getStoredFeatures,
@@ -83,16 +87,11 @@ function AppContent() {
   const [isStudioOpen, setIsStudioOpen] = useState(false);
   const [editingWidget, setEditingWidget] = useState(null);
 
-  // Responsive mode detection (automatically adapts when window is minimized or small)
-  const [isCompact, setIsCompact] = useState(() => {
-    if (typeof window === 'undefined') return false;
-    return window.innerWidth < 1024 || window.innerHeight < 680;
-  });
+  const [viewport, setViewport] = useState(getViewportSize);
+  const isCompact = viewport.width < 1024;
 
   useEffect(() => {
-    const handleResize = () => {
-      setIsCompact(window.innerWidth < 1024 || window.innerHeight < 680);
-    };
+    const handleResize = () => setViewport(getViewportSize());
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
@@ -119,7 +118,7 @@ function AppContent() {
   }, []);
 
   // Calculate dynamic content-aware minWidth for SpeedDials
-  const speedDialsHeight = layout.speedDials?.height || defaultLayout.speedDials.height;
+  const speedDialsHeight = (layout.speedDials?.height || defaultLayout.speedDials.height) * viewport.height;
   const speedDialsRows = Math.max(1, Math.floor((speedDialsHeight - 20) / 92));
   const speedDialsColsNeeded = Math.max(1, Math.ceil(speedDialsCount / speedDialsRows));
   // Each column needs 92px (80px card + 12px gap) + 28px container padding
@@ -133,10 +132,13 @@ function AppContent() {
     const applyRemoteOrLocalData = (userData, isExplicitPull = false) => {
       if (!userData) return;
       if (userData.widgetLayout && typeof userData.widgetLayout === "object") {
-        setLayout({
-          ...getDefaultLayout(),
-          ...userData.widgetLayout,
-        });
+        if (isExplicitPull) {
+          const pulledLayout = mergeWithDefaults(getDefaultLayout(), userData.widgetLayout);
+          localStorage.setItem(`landing_widget_layout_${effectiveUid}`, JSON.stringify(pulledLayout));
+          setLayout(pulledLayout);
+        } else {
+          setLayout(getStoredLayout(effectiveUid));
+        }
       } else if (isExplicitPull) {
         setLayout(getDefaultLayout());
       }
@@ -227,23 +229,23 @@ function AppContent() {
         const nextWidgetLayout = existing
           ? {
               ...existing,
-              width: widgetObj.width,
-              height: widgetObj.height,
+              width: widgetObj.width / viewport.width,
+              height: widgetObj.height / viewport.height,
             }
-          : {
+          : toViewportLayout({
               x: 40,
               y: 185,
               width: widgetObj.width,
               height: widgetObj.height,
               minWidth: 160,
               minHeight: 100,
-            };
+            }, viewport);
         const next = { ...prev, [layoutKey]: nextWidgetLayout };
         saveStoredLayout(effectiveUid, next, isGuest);
         return next;
       });
     },
-    [effectiveUid, isGuest]
+    [effectiveUid, isGuest, viewport]
   );
 
   const handleDeleteCustomWidget = useCallback(
@@ -464,6 +466,7 @@ function AppContent() {
                 title="Weather"
                 layout={layout.weather}
                 defaultLayout={defaultLayout.weather}
+                viewport={viewport}
                 onLayoutChange={handleLayoutChange}
                 minWidth={210}
                 minHeight={115}
@@ -482,6 +485,7 @@ function AppContent() {
                 title="Clock"
                 layout={layout.clock}
                 defaultLayout={defaultLayout.clock}
+                viewport={viewport}
                 onLayoutChange={handleLayoutChange}
                 minWidth={100}
                 minHeight={100}
@@ -500,6 +504,7 @@ function AppContent() {
                 title="Search"
                 layout={layout.search}
                 defaultLayout={defaultLayout.search}
+                viewport={viewport}
                 onLayoutChange={handleLayoutChange}
                 minWidth={340}
                 minHeight={50}
@@ -518,6 +523,7 @@ function AppContent() {
                 title="Speed Dials"
                 layout={layout.speedDials}
                 defaultLayout={defaultLayout.speedDials}
+                viewport={viewport}
                 onLayoutChange={handleLayoutChange}
                 minWidth={speedDialsMinWidth}
                 minHeight={115}
@@ -536,6 +542,7 @@ function AppContent() {
                 title="Favorites"
                 layout={layout.favorites}
                 defaultLayout={defaultLayout.favorites}
+                viewport={viewport}
                 onLayoutChange={handleLayoutChange}
                 minWidth={320}
                 minHeight={150}
@@ -553,14 +560,15 @@ function AppContent() {
               customWidgets.map((cw) => {
                 const key = `custom_${cw.id}`;
                 const widgetDefaultLayout = {
-                  x: 40,
-                  y: 185,
-                  width: cw.width || 360,
-                  height: cw.height || 210,
+                  x: 40 / 1280,
+                  y: 185 / 800,
+                  width: (cw.width || 360) / 1280,
+                  height: (cw.height || 210) / 800,
                   minWidth: 160,
                   minHeight: 100,
                 };
                 const activeLayout = layout[key] || widgetDefaultLayout;
+                const activePixelLayout = toPixelLayout(activeLayout, viewport);
 
                 return (
                   <DraggableWidget
@@ -569,6 +577,7 @@ function AppContent() {
                     title={cw.name}
                     layout={activeLayout}
                     defaultLayout={widgetDefaultLayout}
+                    viewport={viewport}
                     onLayoutChange={handleLayoutChange}
                     minWidth={160}
                     minHeight={100}
@@ -578,8 +587,8 @@ function AppContent() {
                   >
                     <CustomWidgetFrame
                       widget={cw}
-                      width={activeLayout.width}
-                      height={activeLayout.height}
+                      width={activePixelLayout.width}
+                      height={activePixelLayout.height}
                       showControls={isDragEnabled}
                       onEdit={(target) => {
                         setEditingWidget(target);
@@ -644,6 +653,7 @@ function AppContent() {
       >
         <GlassAIStudio
           onScrollToDashboard={() => transitionTo('dashboard')}
+          isActive={activeView === 'ai-studio'}
         />
       </Suspense>
     </div>

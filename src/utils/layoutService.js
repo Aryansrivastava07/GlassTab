@@ -1,60 +1,85 @@
 import { updateUserData } from '../services/databaseService';
 import { getCachedUserData } from './cacheService';
 
-export const getDefaultLayout = () => {
-  const width = typeof window !== 'undefined' ? window.innerWidth : 1280;
-  const height = typeof window !== 'undefined' ? window.innerHeight : 800;
+export const getViewportSize = () => ({
+  width: typeof window !== 'undefined' ? window.innerWidth : 1280,
+  height: typeof window !== 'undefined' ? window.innerHeight : 800,
+});
 
-  return {
+// Positions and sizes are fractions of the viewport. Minimum content sizes stay in pixels.
+export const getDefaultLayout = () => ({
     weather: {
-      x: 28,
-      y: 28,
-      width: 230,
-      height: 125,
+      x: 28 / 1280,
+      y: 28 / 800,
+      width: 230 / 1280,
+      height: 125 / 800,
       minWidth: 180,
       minHeight: 100,
     },
     clock: {
-      x: Math.max(28, width - 175),
-      y: 28,
-      width: 145,
-      height: 145,
+      x: 1105 / 1280,
+      y: 28 / 800,
+      width: 145 / 1280,
+      height: 145 / 800,
       minWidth: 100,
       minHeight: 100,
     },
     search: {
-      x: Math.max(20, Math.round((width - 640) / 2)),
-      y: Math.max(60, Math.round(height * 0.22)),
-      width: 640,
-      height: 56,
+      x: 0.25,
+      y: 0.22,
+      width: 0.5,
+      height: 56 / 800,
       minWidth: 300,
       minHeight: 50,
     },
     speedDials: {
-      x: Math.max(20, Math.round((width - 720) / 2)),
-      y: Math.max(140, Math.round(height * 0.36)),
-      width: 720,
-      height: 125,
+      x: 0.21875,
+      y: 0.36,
+      width: 0.5625,
+      height: 125 / 800,
       minWidth: 260,
       minHeight: 100,
     },
     favorites: {
-      x: Math.max(20, Math.round((width - 800) / 2)),
-      y: Math.max(260, Math.round(height * 0.58)),
-      width: 800,
-      height: 250,
+      x: 0.1875,
+      y: 0.58,
+      width: 0.625,
+      height: 250 / 800,
       minWidth: 320,
       minHeight: 150,
     },
+});
+
+export const toViewportLayout = (layout, viewport = getViewportSize()) => {
+  if (!layout || typeof layout !== 'object') return layout;
+  // Older layouts stored pixels. Convert them at the first viewport where they are read.
+  if (Number(layout.width) <= 1 && Number(layout.height) <= 1) return layout;
+  return {
+    ...layout,
+    x: (Number(layout.x) || 0) / viewport.width,
+    y: (Number(layout.y) || 0) / viewport.height,
+    width: (Number(layout.width) || 0) / viewport.width,
+    height: (Number(layout.height) || 0) / viewport.height,
   };
 };
 
-const mergeWithDefaults = (defaults, stored) => {
-  const merged = { ...stored };
+export const toPixelLayout = (layout, viewport = getViewportSize()) => ({
+  ...layout,
+  x: layout.x * viewport.width,
+  y: layout.y * viewport.height,
+  width: layout.width * viewport.width,
+  height: layout.height * viewport.height,
+});
+
+export const mergeWithDefaults = (defaults, stored, viewport = getViewportSize()) => {
+  const merged = {};
+  for (const [key, value] of Object.entries(stored || {})) {
+    merged[key] = toViewportLayout(value, viewport);
+  }
   for (const key of Object.keys(defaults)) {
     merged[key] = {
       ...defaults[key],
-      ...(stored?.[key] || {}),
+      ...(merged[key] || {}),
     };
   }
   return merged;
@@ -62,20 +87,27 @@ const mergeWithDefaults = (defaults, stored) => {
 
 export const getStoredLayout = (effectiveUid) => {
   const defaults = getDefaultLayout();
+  const storageKey = `landing_widget_layout_${effectiveUid}`;
 
   try {
-    const raw = localStorage.getItem(`landing_widget_layout_${effectiveUid}`);
+    const raw = localStorage.getItem(storageKey);
     if (raw) {
       const parsed = JSON.parse(raw);
       if (parsed && typeof parsed === 'object') {
-        return mergeWithDefaults(defaults, parsed);
+        const merged = mergeWithDefaults(defaults, parsed);
+        if (Object.values(parsed).some((item) => item && Number(item.width) > 1)) {
+          localStorage.setItem(storageKey, JSON.stringify(merged));
+        }
+        return merged;
       }
     }
 
     // Try user cache
     const cached = getCachedUserData(effectiveUid);
     if (cached && cached.widgetLayout && typeof cached.widgetLayout === 'object') {
-      return mergeWithDefaults(defaults, cached.widgetLayout);
+      const merged = mergeWithDefaults(defaults, cached.widgetLayout);
+      localStorage.setItem(storageKey, JSON.stringify(merged));
+      return merged;
     }
   } catch (err) {
     console.error('Failed to parse stored widget layout:', err);

@@ -17,6 +17,7 @@ import {
   Wand2,
   Mic,
   MicOff,
+  Volume2,
   Edit2,
   ShieldCheck,
   Globe,
@@ -36,12 +37,18 @@ import {
   createNewThread,
   deleteChatThread,
   renameChatThread,
-  hasConfiguredGeminiKey,
   sendAiMessage,
+  AI_PROVIDERS,
+  getAiSettings,
+  saveAiSettings,
+  getProviderApiKey,
+  saveProviderApiKey,
 } from '../services/aiChatService';
 import { getGeminiApiKey, saveGeminiApiKey, maskApiKey, subscribeToCloudGeminiKey } from '../services/aiWidgetService';
 import { useAuth } from '../context/AuthContext';
 import { signInWithGoogle, signInWithEmail, registerWithEmail } from '../services/authService';
+import { AI_VOICES, transcribeVoiceRecording, getVoiceScript, generateVoicePhrase } from '../services/aiVoiceService';
+import { getAudioRecoveryDelay, isUsableVoiceBuffer, voiceAudioMatchesScript } from '../utils/voiceSpeech';
 
 // Lightweight Zero-Dependency Markdown Formatter with Copyable Code Blocks
 const FormattedMessage = ({ text }) => {
@@ -177,7 +184,7 @@ const renderInlineFormatting = (text) => {
   return elements;
 };
 
-export const GlassAIStudio = ({ onScrollToDashboard }) => {
+export const GlassAIStudio = ({ onScrollToDashboard, isActive = true }) => {
   const { currentUser, isGuest } = useAuth();
   const isSignedIn = !isGuest && Boolean(currentUser?.uid && currentUser.uid !== 'local_guest');
   const effectiveUid = isSignedIn ? currentUser.uid : 'local_guest';
@@ -199,24 +206,32 @@ export const GlassAIStudio = ({ onScrollToDashboard }) => {
   const [showCharacterMenu, setShowCharacterMenu] = useState(false);
   const [showCustomCharModal, setShowCustomCharModal] = useState(false);
   const [showApiKeyModal, setShowApiKeyModal] = useState(false);
-  const [apiKeyInput, setApiKeyInput] = useState(() => getGeminiApiKey());
+  const [aiSettings, setAiSettings] = useState(getAiSettings);
+  const provider = aiSettings.provider;
+  const providerInfo = AI_PROVIDERS[provider];
+  const activeModel = aiSettings.models[provider] || providerInfo.model;
+  const [apiKeyInput, setApiKeyInput] = useState(() => getProviderApiKey(getAiSettings().provider));
   const [showKeyPassword, setShowKeyPassword] = useState(false);
   const [apiKeyNotice, setApiKeyNotice] = useState('');
-  const [hasKey, setHasKey] = useState(() => hasConfiguredGeminiKey());
+  const [hasKey, setHasKey] = useState(() => Boolean(getProviderApiKey(getAiSettings().provider).trim()));
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const isUnlocked = true;
 
   // Subscribe to real-time Cloud Firestore encrypted Gemini key
   useEffect(() => {
     const unsubKey = subscribeToCloudGeminiKey(effectiveUid, (cloudKey) => {
-      if (cloudKey) setApiKeyInput(cloudKey);
-      setHasKey(Boolean(cloudKey && cloudKey.trim().length > 10));
+      if (provider === 'gemini') {
+        setApiKeyInput(cloudKey || '');
+        setHasKey(Boolean(cloudKey?.trim()));
+      }
     });
 
     const onKeyChanged = (e) => {
       const k = e.detail?.key !== undefined ? e.detail.key : getGeminiApiKey();
-      setApiKeyInput(k);
-      setHasKey(Boolean(k && k.trim().length > 10));
+      if (provider === 'gemini') {
+        setApiKeyInput(k);
+        setHasKey(Boolean(k?.trim()));
+      }
     };
     window.addEventListener('landing_gemini_key_changed', onKeyChanged);
 
@@ -224,7 +239,23 @@ export const GlassAIStudio = ({ onScrollToDashboard }) => {
       unsubKey();
       window.removeEventListener('landing_gemini_key_changed', onKeyChanged);
     };
-  }, [effectiveUid]);
+  }, [effectiveUid, provider]);
+
+  const handleProviderChange = (nextProvider) => {
+    if (!AI_PROVIDERS[nextProvider]) return;
+    if (voiceModeRef.current) stopVoiceConversation();
+    setAiSettings(saveAiSettings({ provider: nextProvider }));
+    const key = getProviderApiKey(nextProvider);
+    setApiKeyInput(key);
+    setHasKey(Boolean(key.trim()));
+    setApiKeyNotice('');
+    setUseWebSearch(false);
+  };
+
+  const handleModelChange = (nextModel) => {
+    const models = { ...aiSettings.models, [provider]: nextModel };
+    setAiSettings(saveAiSettings({ models }));
+  };
 
   const [showEmailAuth, setShowEmailAuth] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
@@ -275,9 +306,80 @@ export const GlassAIStudio = ({ onScrollToDashboard }) => {
   const [newCharTagline, setNewCharTagline] = useState('');
   const [newCharPrompt, setNewCharPrompt] = useState('');
 
-  // Speech-to-Text State
+  // Voice conversation state. Recording stops while the AI generates and plays audio.
+  const [isVoiceMode, setIsVoiceMode] = useState(false);
   const [isListening, setIsListening] = useState(false);
-  const recognitionRef = useRef(null);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isPreparingVoice, setIsPreparingVoice] = useState(false);
+  const [isRestoringAudio, setIsRestoringAudio] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [voiceError, setVoiceError] = useState('');
+  const [showVoiceSetup, setShowVoiceSetup] = useState(false);
+  const [voiceApiKeyInput, setVoiceApiKeyInput] = useState('');
+  const [hasVoiceKey, setHasVoiceKey] = useState(() => Boolean(getProviderApiKey('groqcloud').trim()));
+  const [preferredVoiceName, setPreferredVoiceName] = useState(() => {
+    try {
+      const saved = window.localStorage.getItem('landing_ai_generated_voice');
+      return AI_VOICES.some((voice) => voice.id === saved) ? saved : 'autumn';
+    }
+    catch { return 'autumn'; }
+  });
+  const [microphones, setMicrophones] = useState([]);
+  const [selectedMicId, setSelectedMicId] = useState(() => {
+    try { return window.localStorage.getItem('landing_ai_microphone') || ''; }
+    catch { return ''; }
+  });
+  const voiceModeRef = useRef(false);
+  const isGeneratingRef = useRef(false);
+  const recorderRef = useRef(null);
+  const streamRef = useRef(null);
+  const audioContextRef = useRef(null);
+  const playbackContextRef = useRef(null);
+  const micClosePromiseRef = useRef(Promise.resolve());
+  const micReleasedAtRef = useRef(0);
+  const refreshMicrophonesRef = useRef(null);
+  const listenTimerRef = useRef(null);
+  const audioRef = useRef(null);
+  const audioDoneRef = useRef(null);
+  const voiceRequestRef = useRef(null);
+  const voiceSessionRef = useRef(0);
+  const sessionVoiceRef = useRef('autumn');
+  const sessionMicRef = useRef('');
+  const restartTimerRef = useRef(null);
+  const sendMessageRef = useRef(null);
+  const stopVoiceRef = useRef(null);
+
+  useEffect(() => {
+    const refreshVoiceKey = (event) => {
+      if (!event || event.detail?.provider === 'groqcloud') {
+        setHasVoiceKey(Boolean(getProviderApiKey('groqcloud').trim()));
+      }
+    };
+    window.addEventListener('landing_ai_provider_key_changed', refreshVoiceKey);
+    return () => window.removeEventListener('landing_ai_provider_key_changed', refreshVoiceKey);
+  }, []);
+
+  useEffect(() => {
+    const media = navigator.mediaDevices;
+    if (!media?.enumerateDevices) return undefined;
+    let mounted = true;
+    const refresh = async () => {
+      try {
+        const devices = await media.enumerateDevices();
+        if (mounted) setMicrophones(devices.filter((device) =>
+          device.kind === 'audioinput' && device.deviceId && !['default', 'communications'].includes(device.deviceId)
+        ));
+      } catch { /* The system default microphone remains available. */ }
+    };
+    refreshMicrophonesRef.current = refresh;
+    refresh();
+    media.addEventListener?.('devicechange', refresh);
+    return () => {
+      mounted = false;
+      media.removeEventListener?.('devicechange', refresh);
+      refreshMicrophonesRef.current = null;
+    };
+  }, []);
 
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
@@ -321,6 +423,7 @@ export const GlassAIStudio = ({ onScrollToDashboard }) => {
 
   // --- ACTIONS ---
   const handleSelectThread = (threadId) => {
+    if (voiceModeRef.current) stopVoiceConversation();
     setActiveThreadId(threadId);
     setIsMobileSidebarOpen(false);
     const target = threads.find((t) => t.id === threadId);
@@ -330,6 +433,7 @@ export const GlassAIStudio = ({ onScrollToDashboard }) => {
   };
 
   const handleCreateNewChat = (charId = activeCharacterId) => {
+    if (voiceModeRef.current) stopVoiceConversation();
     setIsMobileSidebarOpen(false);
     const { threads: nextThreads, activeThread: created } = createNewThread(charId);
     setThreads(nextThreads);
@@ -388,13 +492,10 @@ export const GlassAIStudio = ({ onScrollToDashboard }) => {
 
   const handleSaveApiKey = async (e) => {
     e.preventDefault();
-    await saveGeminiApiKey(apiKeyInput.trim(), effectiveUid);
-    setHasKey(Boolean(apiKeyInput.trim().length > 10));
-    setApiKeyNotice(
-      isSignedIn
-        ? '🔒 Encrypted with AES-256 and synced to your Google Account!'
-        : 'API Key saved securely in your browser!'
-    );
+    if (provider === 'gemini') await saveGeminiApiKey(apiKeyInput.trim(), effectiveUid);
+    else saveProviderApiKey(provider, apiKeyInput.trim());
+    setHasKey(Boolean(apiKeyInput.trim()));
+    setApiKeyNotice(provider === 'gemini' && isSignedIn ? 'Gemini key saved and cloud synced.' : 'API key saved in this browser.');
     setTimeout(() => {
       setShowApiKeyModal(false);
       setApiKeyNotice('');
@@ -402,7 +503,8 @@ export const GlassAIStudio = ({ onScrollToDashboard }) => {
   };
 
   const handleRemoveApiKey = async () => {
-    await saveGeminiApiKey('', effectiveUid);
+    if (provider === 'gemini') await saveGeminiApiKey('', effectiveUid);
+    else saveProviderApiKey(provider, '');
     setApiKeyInput('');
     setHasKey(false);
     setApiKeyNotice('API Key removed.');
@@ -411,6 +513,243 @@ export const GlassAIStudio = ({ onScrollToDashboard }) => {
     }, 1200);
   };
 
+  function releaseMicrophone() {
+    clearInterval(listenTimerRef.current);
+    listenTimerRef.current = null;
+    const stream = streamRef.current;
+    const context = audioContextRef.current;
+    stream?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+    audioContextRef.current = null;
+    if (stream || context) {
+      micClosePromiseRef.current = (context && context.state !== 'closed'
+        ? context.close().catch(() => {})
+        : Promise.resolve()).then(() => { micReleasedAtRef.current = performance.now(); });
+    }
+    return micClosePromiseRef.current;
+  }
+
+  function cancelRecording() {
+    const recorder = recorderRef.current;
+    recorderRef.current = null;
+    if (recorder) {
+      recorder.ondataavailable = null;
+      recorder.onstop = null;
+      if (recorder.state !== 'inactive') recorder.stop();
+    }
+    releaseMicrophone();
+  }
+
+  function stopVoiceConversation(message = '', updateUi = true) {
+    voiceModeRef.current = false;
+    voiceSessionRef.current += 1;
+    clearTimeout(restartTimerRef.current);
+    restartTimerRef.current = null;
+    cancelRecording();
+    voiceRequestRef.current?.abort();
+    voiceRequestRef.current = null;
+    audioRef.current?.pause();
+    audioDoneRef.current?.();
+    audioDoneRef.current = null;
+    playbackContextRef.current?.close().catch(() => {});
+    playbackContextRef.current = null;
+    if (updateUi) {
+      setIsVoiceMode(false);
+      setIsListening(false);
+      setIsSpeaking(false);
+      setIsPreparingVoice(false);
+      setIsRestoringAudio(false);
+      setIsTranscribing(false);
+      setVoiceError(message);
+    }
+  }
+  stopVoiceRef.current = stopVoiceConversation;
+
+  async function startVoiceListening() {
+    if (!voiceModeRef.current || recorderRef.current || isGeneratingRef.current || audioRef.current) return;
+    const session = voiceSessionRef.current;
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+        ...(sessionMicRef.current ? { deviceId: { exact: sessionMicRef.current } } : {}),
+      } });
+      if (!voiceModeRef.current || session !== voiceSessionRef.current) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+      streamRef.current = stream;
+      refreshMicrophonesRef.current?.();
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      const context = new AudioContextClass();
+      audioContextRef.current = context;
+      const source = context.createMediaStreamSource(stream);
+      const analyser = context.createAnalyser();
+      analyser.fftSize = 2048;
+      source.connect(analyser);
+      if (context.state === 'suspended') context.resume().catch(() => {});
+      const samples = new Float32Array(analyser.fftSize);
+      const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4']
+        .find((type) => MediaRecorder.isTypeSupported(type));
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      recorderRef.current = recorder;
+      const chunks = [];
+      let speechDetected = false;
+      let loudFrames = 0;
+      let noiseFloor = 0.004;
+      let lastSpeechAt = 0;
+      const startedAt = performance.now();
+      recorder.ondataavailable = (event) => { if (event.data.size) chunks.push(event.data); };
+      recorder.onstop = async () => {
+        if (recorderRef.current !== recorder) return;
+        recorderRef.current = null;
+        await releaseMicrophone();
+        setIsListening(false);
+        if (!voiceModeRef.current || session !== voiceSessionRef.current) return;
+        if (!speechDetected || !chunks.length) {
+          restartTimerRef.current = setTimeout(startVoiceListening, 250);
+          return;
+        }
+        setIsTranscribing(true);
+        const controller = new AbortController();
+        voiceRequestRef.current = controller;
+        try {
+          const blob = new Blob(chunks, { type: recorder.mimeType || 'audio/webm' });
+          const transcript = await transcribeVoiceRecording(blob, controller.signal);
+          if (!voiceModeRef.current || session !== voiceSessionRef.current) return;
+          setIsTranscribing(false);
+          if (transcript) {
+            setInputMessage(transcript);
+            sendMessageRef.current?.(transcript);
+          } else {
+            restartTimerRef.current = setTimeout(startVoiceListening, 350);
+          }
+        } catch (error) {
+          if (session === voiceSessionRef.current) stopVoiceConversation(error.message || 'Could not transcribe your voice.');
+        } finally {
+          if (voiceRequestRef.current === controller) voiceRequestRef.current = null;
+        }
+      };
+      recorder.start(250);
+      setIsListening(true);
+      listenTimerRef.current = setInterval(() => {
+        if (recorder.state !== 'recording') return;
+        analyser.getFloatTimeDomainData(samples);
+        let power = 0;
+        for (const sample of samples) power += sample * sample;
+        const volume = Math.sqrt(power / samples.length);
+        const now = performance.now();
+        const loud = volume > Math.max(0.016, noiseFloor * 2.2);
+        if (!speechDetected) noiseFloor = Math.min(0.03, noiseFloor * 0.96 + volume * 0.04);
+        loudFrames = loud ? loudFrames + 1 : 0;
+        if (loudFrames >= 3) {
+          speechDetected = true;
+          lastSpeechAt = now;
+        }
+        if ((speechDetected && now - lastSpeechAt > 1100 && now - startedAt > 700) ||
+            now - startedAt > 25000 || (!speechDetected && now - startedAt > 12000)) {
+          recorder.stop();
+        }
+      }, 100);
+    } catch (error) {
+      cancelRecording();
+      if (session !== voiceSessionRef.current) return;
+      stopVoiceConversation(error.name === 'NotAllowedError'
+        ? 'Microphone access was denied. Allow it to use AI voice chat.'
+        : error.name === 'OverconstrainedError' || error.name === 'NotFoundError'
+          ? 'The selected microphone is unavailable. Choose another one in Voice setup.'
+          : `Could not start AI voice: ${error.message}`);
+    }
+  }
+
+  async function speakVoiceReply(text) {
+    if (!voiceModeRef.current) return;
+    const session = voiceSessionRef.current;
+    setIsPreparingVoice(true);
+    const controller = new AbortController();
+    voiceRequestRef.current = controller;
+    let playbackContext = null;
+    let played = false;
+    try {
+      const script = await getVoiceScript(text, controller.signal);
+      if (!voiceModeRef.current || session !== voiceSessionRef.current) return;
+      if (!script) {
+        setIsPreparingVoice(false);
+        restartTimerRef.current = setTimeout(startVoiceListening, 350);
+        return;
+      }
+      let blob = await generateVoicePhrase(script, sessionVoiceRef.current, controller.signal);
+      if (!voiceModeRef.current || session !== voiceSessionRef.current) return;
+
+      setIsRestoringAudio(true);
+      await micClosePromiseRef.current;
+      if (!voiceModeRef.current || session !== voiceSessionRef.current) return;
+      const recoveryRemaining = getAudioRecoveryDelay(micReleasedAtRef.current, performance.now());
+      if (recoveryRemaining) await new Promise((resolve) => setTimeout(resolve, recoveryRemaining));
+      if (!voiceModeRef.current || session !== voiceSessionRef.current) return;
+      setIsRestoringAudio(false);
+
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      playbackContext = new AudioContextClass();
+      playbackContextRef.current = playbackContext;
+      let buffer = null;
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        try { buffer = await playbackContext.decodeAudioData(await blob.arrayBuffer()); }
+        catch { buffer = null; }
+        if (!voiceModeRef.current || session !== voiceSessionRef.current) return;
+        if (isUsableVoiceBuffer(buffer, script)) {
+          const verifiedText = await transcribeVoiceRecording(blob, controller.signal, 'en');
+          if (!voiceModeRef.current || session !== voiceSessionRef.current) return;
+          if (voiceAudioMatchesScript(script, verifiedText)) break;
+        }
+        if (attempt === 1) throw new Error('AI voice returned incomplete audio twice. Try another voice in Voice setup.');
+        blob = await generateVoicePhrase(script, sessionVoiceRef.current, controller.signal);
+      }
+      if (voiceRequestRef.current === controller) voiceRequestRef.current = null;
+      if (!voiceModeRef.current || session !== voiceSessionRef.current) return;
+      await playbackContext.resume();
+      if (!voiceModeRef.current || session !== voiceSessionRef.current) return;
+
+      setIsRestoringAudio(false);
+      setIsPreparingVoice(false);
+      setIsSpeaking(true);
+      await new Promise((resolve, reject) => {
+        const source = playbackContext.createBufferSource();
+        source.buffer = buffer;
+        source.connect(playbackContext.destination);
+        let settled = false;
+        const finish = (error) => {
+          if (settled) return;
+          settled = true;
+          source.onended = null;
+          audioRef.current = null;
+          audioDoneRef.current = null;
+          if (error) reject(error);
+          else resolve();
+        };
+        audioRef.current = { pause: () => { try { source.stop(); } catch { /* Already stopped. */ } finish(); } };
+        audioDoneRef.current = () => finish();
+        source.onended = () => finish();
+        try { source.start(); }
+        catch (error) { finish(error); }
+      });
+      played = true;
+    } catch (error) {
+      if (session === voiceSessionRef.current) stopVoiceConversation(error.message || 'AI voice generation failed.');
+    } finally {
+      if (voiceRequestRef.current === controller) voiceRequestRef.current = null;
+      if (playbackContextRef.current === playbackContext) playbackContextRef.current = null;
+      await playbackContext?.close().catch(() => {});
+    }
+    if (played && voiceModeRef.current && session === voiceSessionRef.current) {
+      setIsSpeaking(false);
+      setIsPreparingVoice(false);
+      restartTimerRef.current = setTimeout(startVoiceListening, 350);
+    }
+  }
+
   const handleSendMessage = async (customPrompt = null) => {
     if (!hasKey) {
       setShowApiKeyModal(true);
@@ -418,9 +757,28 @@ export const GlassAIStudio = ({ onScrollToDashboard }) => {
     }
 
     const textToSend = (customPrompt || inputMessage).trim();
-    if (!textToSend || isGenerating) return;
+    if (!textToSend || isGeneratingRef.current) return;
 
-    if (!customPrompt) setInputMessage('');
+    const wasVoiceTurn = voiceModeRef.current;
+    if (wasVoiceTurn) {
+      voiceSessionRef.current += 1;
+      clearTimeout(restartTimerRef.current);
+      restartTimerRef.current = null;
+      cancelRecording();
+      voiceRequestRef.current?.abort();
+      voiceRequestRef.current = null;
+      audioRef.current?.pause();
+      audioDoneRef.current?.();
+      playbackContextRef.current?.close().catch(() => {});
+      playbackContextRef.current = null;
+      setIsListening(false);
+      setIsSpeaking(false);
+      setIsPreparingVoice(false);
+      setIsRestoringAudio(false);
+      setIsTranscribing(false);
+    }
+
+    if (!customPrompt || wasVoiceTurn) setInputMessage('');
 
     // Append user message immediately
     const userMsg = {
@@ -456,15 +814,18 @@ export const GlassAIStudio = ({ onScrollToDashboard }) => {
 
     setThreads(updatedThreads);
     saveChatThreads(updatedThreads);
+    isGeneratingRef.current = true;
     setIsGenerating(true);
 
     try {
       const reply = await sendAiMessage({
-        userId: effectiveUid,
+        provider,
+        model: activeModel,
         character: activeCharacter,
         userMessage: textToSend,
         history: updatedMessages.slice(0, -1),
         useWebSearch,
+        voiceMode: wasVoiceTurn,
       });
 
       const aiMsg = {
@@ -472,6 +833,7 @@ export const GlassAIStudio = ({ onScrollToDashboard }) => {
         role: 'model',
         text: reply.text,
         modelUsed: reply.modelUsed,
+        usage: reply.usage,
         groundingChunks: reply.groundingChunks,
         timestamp: new Date().toISOString(),
       };
@@ -488,15 +850,18 @@ export const GlassAIStudio = ({ onScrollToDashboard }) => {
 
       setThreads(finalThreads);
       saveChatThreads(finalThreads);
+      speakVoiceReply(reply.text);
     } catch (err) {
+      if (voiceModeRef.current) stopVoiceConversation('The AI request failed. Read the error in chat and tap the microphone to try again.');
       if (err.message === 'MISSING_API_KEY') {
         setShowApiKeyModal(true);
       } else {
         const errorMsg = {
           id: `msg_${Date.now()}_err`,
           role: 'model',
-          text: `⚠️ **Error:** ${err.message || 'Unable to connect to Gemini API. Please check your network or API key.'}`,
+          text: `⚠️ **Error:** ${err.message || 'Unable to connect to the AI provider. Please check your network or API key.'}`,
           isError: true,
+          keyIssue: /api key|invalid key|credits|billing|permission/i.test(err.message || ''),
           timestamp: new Date().toISOString(),
         };
 
@@ -509,39 +874,80 @@ export const GlassAIStudio = ({ onScrollToDashboard }) => {
         saveChatThreads(finalThreads);
       }
     } finally {
+      isGeneratingRef.current = false;
       setIsGenerating(false);
     }
   };
 
-  // Web Speech API Voice Dictation
-  const toggleListening = () => {
-    if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
-      alert('Speech Recognition is not supported in this browser.');
+  sendMessageRef.current = handleSendMessage;
+
+  const toggleVoiceConversation = () => {
+    if (voiceModeRef.current) {
+      stopVoiceConversation();
       return;
     }
-
-    if (isListening) {
-      recognitionRef.current?.stop();
-      setIsListening(false);
+    if (!hasKey) {
+      setShowApiKeyModal(true);
       return;
     }
+    if (!getProviderApiKey('groqcloud').trim()) {
+      setShowVoiceSetup(true);
+      setVoiceError('Add your GroqCloud API key to start AI voice chat.');
+      return;
+    }
+    if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder ||
+        !(window.AudioContext || window.webkitAudioContext)) {
+      setVoiceError('AI voice chat needs microphone recording support. Try a current version of Chrome or Edge.');
+      return;
+    }
+    setVoiceError('');
+    setShowVoiceSetup(false);
+    voiceModeRef.current = true;
+    sessionVoiceRef.current = preferredVoiceName;
+    sessionMicRef.current = selectedMicId;
+    setIsVoiceMode(true);
+    startVoiceListening();
+  };
 
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    const recognition = new SpeechRecognition();
-    recognition.continuous = false;
-    recognition.interimResults = false;
-    recognition.lang = 'en-US';
+  useEffect(() => {
+    if (!isActive && voiceModeRef.current) stopVoiceRef.current?.();
+  }, [isActive]);
 
-    recognition.onstart = () => setIsListening(true);
-    recognition.onresult = (event) => {
-      const transcript = event.results[0][0].transcript;
-      setInputMessage((prev) => (prev ? `${prev} ${transcript}` : transcript));
-    };
-    recognition.onerror = () => setIsListening(false);
-    recognition.onend = () => setIsListening(false);
+  useEffect(() => () => stopVoiceRef.current?.('', false), []);
 
-    recognitionRef.current = recognition;
-    recognition.start();
+  const voiceStage = isListening ? 'listening' : isTranscribing || isGenerating ? 'thinking' : isRestoringAudio ? 'restoring' : isSpeaking ? 'speaking' : isPreparingVoice ? 'preparing' : 'connecting';
+  const voiceStageCopy = {
+    listening: ['Listening', 'I’ll respond when you finish speaking.'],
+    thinking: [isTranscribing ? 'Understanding' : 'Thinking', isTranscribing ? 'Transcribing your voice…' : 'Putting a reply together…'],
+    speaking: ['Speaking', `${activeCharacter.name} is replying with AI voice`],
+    preparing: ['Preparing voice', 'Generating and checking speech…'],
+    restoring: ['Restoring audio', 'Waiting for your headphones to return to full quality…'],
+    connecting: ['Getting ready', 'Starting the microphone…'],
+  };
+
+  const handleVoiceSelection = (event) => {
+    const name = event.target.value;
+    setPreferredVoiceName(name);
+    try { window.localStorage.setItem('landing_ai_generated_voice', name); }
+    catch { /* The current session can still use the chosen voice. */ }
+  };
+
+  const handleMicrophoneSelection = (event) => {
+    const deviceId = event.target.value;
+    setSelectedMicId(deviceId);
+    try { window.localStorage.setItem('landing_ai_microphone', deviceId); }
+    catch { /* This call can still use the selected microphone. */ }
+  };
+
+  const handleSaveVoiceKey = (event) => {
+    event.preventDefault();
+    const key = voiceApiKeyInput.trim();
+    if (!key) return;
+    saveProviderApiKey('groqcloud', key);
+    setHasVoiceKey(true);
+    setVoiceApiKeyInput('');
+    setVoiceError('');
+    setShowVoiceSetup(false);
   };
 
   return (
@@ -570,7 +976,7 @@ export const GlassAIStudio = ({ onScrollToDashboard }) => {
             </div>
             <div>
               <h2 className="text-sm font-bold text-white tracking-tight leading-tight">AI Studio</h2>
-              <span className="text-[10px] text-gray-400 font-mono">Gemini 3.8 Flash</span>
+              <span className="text-[10px] text-gray-400 font-mono">{providerInfo.label} · {activeModel}</span>
             </div>
           </div>
           
@@ -626,13 +1032,13 @@ export const GlassAIStudio = ({ onScrollToDashboard }) => {
           )}
         </div>
 
-        {/* Sidebar Footer: Gemini API Key Status */}
+        {/* Sidebar Footer: selected provider key */}
         <div className="p-3.5 border-t border-white/10 bg-black/20 space-y-2">
           {hasKey ? (
             <div className="flex items-center justify-between p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-[11px] text-emerald-300">
               <span className="flex items-center gap-1.5 font-medium">
                 <ShieldCheck size={14} className="text-emerald-400" />
-                {isSignedIn ? 'AES-256 Cloud Synced' : 'Gemini Key Active'}
+                {provider === 'gemini' && isSignedIn ? 'Gemini Cloud Synced' : `${providerInfo.label} Key Active`}
               </span>
               <button
                 onClick={() => setShowApiKeyModal(true)}
@@ -645,17 +1051,17 @@ export const GlassAIStudio = ({ onScrollToDashboard }) => {
             <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 space-y-1.5 text-left">
               <div className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-300">
                 <KeyRound size={13} className="text-amber-400" />
-                <span>Gemini API Key Required</span>
+                <span>{providerInfo.label} API Key Required</span>
               </div>
               <p className="text-[10px] text-gray-400 leading-tight">
-                Add your free key from Google AI Studio to unlock unlimited chats.
+                Add your {providerInfo.label} API key to start chatting. Provider quotas and billing apply.
               </p>
               <button
                 onClick={() => setShowApiKeyModal(true)}
                 className="w-full py-1.5 text-[10px] bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-white rounded-lg font-semibold flex items-center justify-center gap-1 transition cursor-pointer shadow-md shadow-amber-500/10"
               >
                 <KeyRound size={11} />
-                <span>Add Free Key (Takes 30s)</span>
+                <span>Add API Key</span>
               </button>
             </div>
           )}
@@ -751,12 +1157,13 @@ export const GlassAIStudio = ({ onScrollToDashboard }) => {
             {/* Live Web Search Grounding Toggle */}
             <button
               onClick={() => setUseWebSearch(!useWebSearch)}
+              disabled={provider !== 'gemini'}
               className={`px-2.5 py-1 rounded-xl text-xs font-medium flex items-center gap-1.5 transition cursor-pointer border ${
                 useWebSearch
                   ? 'bg-blue-600/80 text-white border-blue-400 shadow-sm'
                   : 'bg-white/5 text-gray-400 hover:text-white border-white/10'
               }`}
-              title="Toggle Live Google Search Grounding"
+              title={provider === 'gemini' ? 'Toggle Google Search Grounding' : 'Web search is available with Gemini only'}
             >
               <Globe size={13} className={useWebSearch ? 'text-sky-300' : ''} />
               <span className="hidden sm:inline">Web Search</span>
@@ -784,13 +1191,13 @@ export const GlassAIStudio = ({ onScrollToDashboard }) => {
                 <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/25 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-amber-200 animate-fadeIn shadow-lg">
                   <div className="flex items-center gap-2.5">
                     <KeyRound size={16} className="text-amber-400 shrink-0" />
-                    <span>Add your free Google Gemini API key to start chatting with {activeCharacter.name}.</span>
+                    <span>Add a {providerInfo.label} API key to start chatting with {activeCharacter.name}.</span>
                   </div>
                   <button
                     onClick={() => setShowApiKeyModal(true)}
                     className="px-3.5 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-white font-semibold rounded-xl text-xs shrink-0 transition cursor-pointer active:scale-95 shadow-md shadow-amber-500/20"
                   >
-                    Add Free Key
+                    Add API Key
                   </button>
                 </div>
               )}
@@ -868,7 +1275,10 @@ export const GlassAIStudio = ({ onScrollToDashboard }) => {
                       }`}
                     >
                       <FormattedMessage text={msg.text} />
-                      {msg.isError && (
+                      {!isUser && !msg.isError && msg.usage?.total && (
+                        <div className="mt-2 text-[10px] text-gray-500">{msg.modelUsed} · {msg.usage.total} tokens</div>
+                      )}
+                      {msg.isError && msg.keyIssue && (
                         <button
                           onClick={() => setShowApiKeyModal(true)}
                           className="mt-2.5 px-3 py-1.5 bg-rose-500/20 hover:bg-rose-500/30 border border-rose-400/40 text-rose-200 text-xs rounded-xl flex items-center gap-1.5 transition cursor-pointer"
@@ -905,20 +1315,84 @@ export const GlassAIStudio = ({ onScrollToDashboard }) => {
 
         {/* Input Bar */}
         <div className="p-4 border-t border-white/10 bg-black/35 shrink-0">
+          {isVoiceMode && (
+            <div className={`voice-stage voice-stage--${voiceStage} mb-3`} role="status" aria-live="polite">
+              <div className="voice-orb-wrap" aria-hidden="true">
+                <span className="voice-ring voice-ring--one" />
+                <span className="voice-ring voice-ring--two" />
+                <span className="voice-orb">
+                  {isSpeaking ? <Volume2 size={22} strokeWidth={1.8} /> : <Mic size={22} strokeWidth={1.8} />}
+                </span>
+              </div>
+              <div className="voice-stage-copy">
+                <div className="voice-stage-title">{voiceStageCopy[voiceStage][0]}</div>
+                <div className="voice-stage-subtitle">{voiceStageCopy[voiceStage][1]}</div>
+                <div className="voice-choice">
+                  <span>AI voice</span>
+                  <strong>{AI_VOICES.find((voice) => voice.id === sessionVoiceRef.current)?.label || 'Autumn'}</strong>
+                </div>
+                <div className="voice-source">AI generated · GroqCloud</div>
+              </div>
+              <div className="voice-bars" aria-hidden="true">
+                {Array.from({ length: 7 }, (_, index) => <i key={index} />)}
+              </div>
+              <button type="button" className="voice-end" onClick={() => stopVoiceConversation()} aria-label="End voice conversation">
+                <MicOff size={16} />
+              </button>
+            </div>
+          )}
+          {showVoiceSetup && (
+            <div className="mb-3 rounded-2xl border border-sky-300/25 bg-slate-900/95 p-3 text-xs text-slate-200">
+              <div className="flex items-center justify-between gap-2">
+                <strong className="text-sm text-white">AI voice setup</strong>
+                <button type="button" onClick={() => setShowVoiceSetup(false)} className="rounded-lg p-1 text-slate-400 hover:text-white" aria-label="Close voice setup"><X size={15} /></button>
+              </div>
+              <p className="mt-1 text-slate-400">GroqCloud Whisper understands your microphone; Orpheus creates expressive female speech in English. Each reply includes an audio quality check and uses your GroqCloud quota.</p>
+              <label className="mt-3 flex items-center gap-2 text-slate-300">
+                <span>AI voice</span>
+                <select value={preferredVoiceName} onChange={handleVoiceSelection} disabled={isVoiceMode} className="rounded-lg border border-white/20 bg-slate-800 px-2 py-1.5 text-white disabled:opacity-50">
+                  {AI_VOICES.map((voice) => <option key={voice.id} value={voice.id}>{voice.label}</option>)}
+                </select>
+                {isVoiceMode && <span className="text-slate-400">End the call to change voice.</span>}
+              </label>
+              <label className="mt-2 flex items-center gap-2 text-slate-300">
+                <span>Microphone</span>
+                <select value={selectedMicId} onChange={handleMicrophoneSelection} disabled={isVoiceMode} className="min-w-0 flex-1 rounded-lg border border-white/20 bg-slate-800 px-2 py-1.5 text-white disabled:opacity-50">
+                  <option value="">System default</option>
+                  {selectedMicId && !microphones.some((device) => device.deviceId === selectedMicId) && <option value={selectedMicId}>Saved microphone unavailable</option>}
+                  {microphones.map((device, index) => <option key={device.deviceId} value={device.deviceId}>{device.label || `Microphone ${index + 1}`}</option>)}
+                </select>
+              </label>
+              <p className="mt-1 text-[11px] text-slate-400">For steady stereo sound in Bluetooth buds, choose your laptop microphone if available. Microphone names appear after access is allowed.</p>
+              <form onSubmit={handleSaveVoiceKey} className="mt-3 flex gap-2">
+                <input type="password" autoComplete="off" value={voiceApiKeyInput} onChange={(event) => setVoiceApiKeyInput(event.target.value)} placeholder={hasVoiceKey ? 'Replace saved GroqCloud key' : 'Paste GroqCloud API key'} aria-label="GroqCloud voice API key" className="min-w-0 flex-1 rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-white outline-none focus:border-sky-400" />
+                <button type="submit" disabled={!voiceApiKeyInput.trim()} className="rounded-lg bg-sky-600 px-3 py-2 font-medium text-white disabled:opacity-40">Save key</button>
+              </form>
+              <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-slate-400">
+                <span>{hasVoiceKey ? 'GroqCloud key saved in this browser.' : 'A GroqCloud key is required for AI voice.'}</span>
+                <a href="https://console.groq.com/keys" target="_blank" rel="noreferrer" className="text-sky-300 hover:text-sky-200">Get a key ↗</a>
+              </div>
+            </div>
+          )}
           <div className="flex items-center gap-2 bg-black/40 border border-white/15 focus-within:border-sky-400/60 focus-within:ring-1 focus-within:ring-sky-400/20 rounded-2xl px-3 py-2 shadow-inner transition">
             
-            {/* Voice Dictation Button */}
+            {/* Hands-free voice conversation */}
             <button
-              onClick={toggleListening}
-              
-              className={`p-2 rounded-xl transition cursor-pointer ${
-                isListening
-                  ? 'bg-red-500 text-white animate-pulse'
+              onClick={toggleVoiceConversation}
+              type="button"
+              aria-pressed={isVoiceMode}
+              className={`p-2 rounded-xl transition cursor-pointer inline-flex items-center gap-1.5 shrink-0 ${
+                isVoiceMode
+                  ? 'bg-rose-500/20 text-rose-200'
                   : 'text-gray-400 hover:text-white hover:bg-white/10'
               }`}
-              title={isListening ? "Stop listening" : "Speak message"}
+              title={isVoiceMode ? 'End voice conversation' : 'Start voice conversation'}
             >
-              {isListening ? <MicOff size={16} /> : <Mic size={16} />}
+              {isVoiceMode ? <MicOff size={16} /> : <Mic size={16} />}
+              <span className="hidden sm:inline text-xs font-medium">{isVoiceMode ? 'End' : 'Talk'}</span>
+            </button>
+            <button type="button" onClick={() => setShowVoiceSetup((value) => !value)} className="rounded-lg p-2 text-slate-400 hover:bg-white/10 hover:text-white" title="AI voice setup" aria-label="AI voice setup">
+              <KeyRound size={15} />
             </button>
 
             {/* Textarea */}
@@ -935,7 +1409,7 @@ export const GlassAIStudio = ({ onScrollToDashboard }) => {
               }}
               placeholder={
                 !hasKey
-                  ? `Add a free Gemini API key to chat with ${activeCharacter.name}...`
+                  ? `Add a ${providerInfo.label} API key to chat with ${activeCharacter.name}...`
                   : `Ask ${activeCharacter.name}... (Press Enter to send, Shift+Enter for newline)`
               }
               className="flex-1 bg-transparent text-white placeholder-gray-500 text-xs sm:text-sm focus:outline-none resize-none max-h-32 leading-relaxed disabled:opacity-40 disabled:cursor-not-allowed"
@@ -950,6 +1424,7 @@ export const GlassAIStudio = ({ onScrollToDashboard }) => {
               <Send size={15} />
             </button>
           </div>
+          {voiceError && <div className="mt-2 text-xs text-rose-300" role="alert">{voiceError}</div>}
         </div>
       </div>
 
@@ -1050,11 +1525,28 @@ export const GlassAIStudio = ({ onScrollToDashboard }) => {
 
             <div>
               <h3 className="text-lg font-bold text-white tracking-tight">
-                Google Gemini API Key
+                AI Provider &amp; API Key
               </h3>
               <p className="text-xs text-gray-400 mt-1.5 leading-relaxed">
-                Add your personal free Gemini key for <strong>unlimited AI chats</strong> with Ginnie &amp; custom personas. Synced securely to your Google account with AES-256 encryption.
+                Choose a provider and model. Gennie sends a short recent history and caps each response. Provider quotas and billing still apply.
               </p>
+              {provider === 'grok' && (
+                <p className="text-[11px] text-amber-300 mt-2">Use an xAI API key from console.x.ai. Cursor access to Grok does not provide an xAI API key.</p>
+              )}
+              {provider === 'openrouter' && (
+                <p className="text-[11px] text-emerald-300 mt-2">The openrouter/free router selects an available free model. Free usage has daily limits.</p>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 text-left">
+              <label className="text-[11px] text-gray-300">Provider
+                <select value={provider} onChange={(e) => handleProviderChange(e.target.value)} className="mt-1 w-full bg-black/40 border border-white/20 rounded-xl px-3 py-2 text-white text-xs">
+                  {Object.entries(AI_PROVIDERS).map(([id, info]) => <option key={id} value={id}>{info.label}</option>)}
+                </select>
+              </label>
+              <label className="text-[11px] text-gray-300">Model ID
+                <input value={activeModel} onChange={(e) => handleModelChange(e.target.value)} className="mt-1 w-full bg-black/40 border border-white/20 rounded-xl px-3 py-2 text-white text-xs" />
+              </label>
             </div>
 
             {/* Currently Active Masked Key Display */}
@@ -1063,7 +1555,7 @@ export const GlassAIStudio = ({ onScrollToDashboard }) => {
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] font-semibold text-emerald-300 flex items-center gap-1.5">
                     <ShieldCheck size={14} className="text-emerald-400" />
-                    {isSignedIn ? 'AES-256 Encrypted & Cloud Synced' : 'Active & Stored Locally'}
+                    {provider === 'gemini' && isSignedIn ? 'Encrypted & Cloud Synced' : 'Stored in this browser'}
                   </span>
                   <button
                     type="button"
@@ -1089,13 +1581,13 @@ export const GlassAIStudio = ({ onScrollToDashboard }) => {
             <form onSubmit={handleSaveApiKey} className="space-y-3 text-left">
               <div>
                 <label className="text-[11px] text-gray-300 block mb-1 font-medium">
-                  {hasKey ? 'Replace API Key' : 'Paste Your Gemini API Key'}
+                  {hasKey ? `Replace ${providerInfo.label} API Key` : `Paste Your ${providerInfo.label} API Key`}
                 </label>
                 <div className="relative">
                   <input
                     type={showKeyPassword ? 'text' : 'password'}
                     required
-                    placeholder="AIzaSy..."
+                    placeholder={`${providerInfo.label} API key`}
                     value={apiKeyInput}
                     onChange={(e) => setApiKeyInput(e.target.value)}
                     className="w-full px-3.5 py-2.5 pr-10 bg-black/40 border border-white/20 rounded-xl text-xs text-white placeholder-gray-500 focus:outline-none focus:border-amber-400 font-mono"
@@ -1113,18 +1605,18 @@ export const GlassAIStudio = ({ onScrollToDashboard }) => {
 
               <div className="p-3 rounded-xl bg-white/5 border border-white/10 space-y-1 text-left">
                 <span className="text-[11px] text-white font-semibold flex items-center gap-1">
-                  <span>How to get your free key in 30 seconds:</span>
+                  <span>Get a {providerInfo.label} API key:</span>
                 </span>
                 <p className="text-[10px] text-gray-400 leading-normal">
-                  Google AI Studio gives free API keys with no credit card required.
+                  Check your provider’s usage limits and billing before sending messages.
                 </p>
                 <a
-                  href="https://aistudio.google.com/app/apikey"
+                  href={providerInfo.keyUrl}
                   target="_blank"
                   rel="noreferrer"
                   className="inline-flex items-center gap-1 text-[11px] text-sky-400 hover:text-sky-300 font-medium underline pt-1"
                 >
-                  <span>Open Google AI Studio &gt; Create API Key</span>
+                  <span>Open {providerInfo.label} API key page</span>
                   <ExternalLink size={11} />
                 </a>
               </div>
@@ -1141,7 +1633,7 @@ export const GlassAIStudio = ({ onScrollToDashboard }) => {
                   type="submit"
                   className="flex-1 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-white text-xs font-semibold rounded-xl shadow-lg transition"
                 >
-                  Save &amp; Encrypt Key
+                  Save API Key
                 </button>
               </div>
             </form>

@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import useDialogFocus from '../hooks/useDialogFocus';
 import { createPortal } from 'react-dom';
 import {
   Plus,
@@ -135,6 +136,8 @@ const VaultMediaViewer = ({ item, uid }) => {
 };
 
 const NotesModal = ({ isOpen, onClose }) => {
+  const dialogRef = useRef(null);
+  useDialogFocus(dialogRef, isOpen, onClose);
   const { currentUser, isGuest } = useAuth();
   const effectiveUid = currentUser?.uid || 'local_guest';
 
@@ -605,7 +608,7 @@ const NotesModal = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4">
+    <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Notes and vault" tabIndex={-1} className="fixed inset-0 z-[99999] flex items-center justify-center p-4">
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/75 backdrop-blur-xs"
@@ -624,6 +627,7 @@ const NotesModal = ({ isOpen, onClose }) => {
           </h2>
           <button
             onClick={onClose}
+            aria-label="Close notes"
             className="p-1.5 text-white/50 hover:text-white hover:bg-white/10 rounded-lg transition-colors cursor-pointer"
           >
             <X size={18} />

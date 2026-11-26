@@ -35,6 +35,7 @@ import {
 import { getUrlSuggestionsForName } from '../utils/urlSuggestionService';
 import UrlSuggestions from './UrlSuggestions';
 import GlassThemeControls from './GlassThemeControls';
+import AccessibilitySettings from './AccessibilitySettings';
 
 const formatSyncTimestamp = (iso) => {
   if (!iso) return 'Never';
@@ -58,7 +59,7 @@ const SYNC_STATUS_BADGE = {
 };
 import { getGeminiApiKey, saveGeminiApiKey, maskApiKey } from '../services/aiWidgetService';
 import { saveWallpaperMeta } from './WallpaperManager';
-import defaultLocalWallpaper from '../assets/walpaper2.jpg';
+import defaultLocalWallpaper from '../assets/wallpaper-default.webp';
 import { signInWithGoogle, signInWithEmail, registerWithEmail, logout, getExtensionOrigin, getOAuthRedirectURL } from '../services/authService';
 
 const PRESET_WALLPAPERS = [
@@ -69,16 +70,16 @@ const PRESET_WALLPAPERS = [
 ];
 
 const FEATURE_ITEMS = [
-  { key: 'search', name: 'Search Bar', desc: 'Central search with engine shortcuts (g, b, d, yt, wiki)', perfBadge: 'Saves RAM', icon: Search },
+  { key: 'search', name: 'Search Bar', desc: 'Search with engine shortcuts (g, b, y)', perfBadge: 'Optional', icon: Search },
   { key: 'autoFocusSearch', name: 'Auto-focus Search on New Tab', desc: 'Focus search bar instead of address bar on Ctrl+T', perfBadge: 'Instant Type', icon: Focus },
-  { key: 'clock', name: 'Analog Clock', desc: 'Minimalist clock with animated second hand', perfBadge: 'Stops 1s Timer', icon: Clock },
+  { key: 'clock', name: 'Analog Clock', desc: 'Current time, with a quieter reduced-motion mode', perfBadge: 'Stops timer', icon: Clock },
   { key: 'weather', name: 'Weather Widget', desc: 'Current conditions and 5-day forecast', perfBadge: 'Stops API Polling', icon: Cloud },
   { key: 'speedDials', name: 'Speed Dials Dock', desc: 'Visual shortcut icons dock on the dashboard', perfBadge: 'Reduces DOM', icon: Grid },
   { key: 'favorites', name: 'Favorites Bar', desc: 'Bookmark categories and quick links bar', perfBadge: 'Reduces DOM', icon: Heart },
   { key: 'customWidgets', name: 'Custom Sandboxed Widgets', desc: 'User-created HTML/JS interactive widgets', perfBadge: 'Stops Iframes', icon: Layers },
   { key: 'notesButton', name: 'Quick Notes & Todos', desc: 'Floating action button and notepad modal', perfBadge: 'Frees Listeners', icon: Pencil },
-  { key: 'aiStudio', name: 'AI Studio Bottom Capsule', desc: 'Bottom toggle button for Gemini Companions', perfBadge: 'Reduces UI', icon: Sparkles },
-  { key: 'videoWallpapers', name: 'Video Wallpapers', desc: 'Allow live video loop wallpapers (falls back to static)', perfBadge: 'Saves 30% CPU', icon: Film },
+  { key: 'aiStudio', name: 'AI Studio Bottom Capsule', desc: 'Show the AI chat and voice shortcut', perfBadge: 'Optional', icon: Sparkles },
+  { key: 'videoWallpapers', name: 'Video Wallpapers', desc: 'Allow live video wallpapers (falls back to a still image)', perfBadge: 'Less decoding', icon: Film },
   { key: 'searchSuggestions', name: 'Search Autocomplete', desc: 'Live query suggestions as you type', perfBadge: 'Zero Network Fetch', icon: Sliders },
 ];
 
@@ -608,6 +609,8 @@ const Sidebar = ({
                 ? 'Shortcuts & Speed Dials'
                 : normalizedTab === 'performance'
                 ? 'Performance & Modes'
+                : normalizedTab === 'accessibility'
+                ? 'Accessibility'
                 : 'Account & Cloud Sync'}
             </h2>
             <p className="text-[11px] text-gray-400">
@@ -621,6 +624,8 @@ const Sidebar = ({
                 ? 'Add, edit, and sync dock speed dials & saved bookmark shortcuts'
                 : normalizedTab === 'performance'
                 ? 'Lite mode for low-spec PCs, standby reading mode, and individual feature toggles'
+                : normalizedTab === 'accessibility'
+                ? 'Reading comfort, motion, and keyboard navigation'
                 : 'Offline status, Google sign-in & manual Pull/Push sync'}
             </p>
           </div>
@@ -635,7 +640,7 @@ const Sidebar = ({
 
         {/* Success notification banner */}
         {savedSuccess && (
-          <div className="bg-emerald-500/20 border-b border-emerald-500/30 text-emerald-300 text-xs py-2 px-4 flex items-center gap-2">
+          <div role="status" className="bg-emerald-500/20 border-b border-emerald-500/30 text-emerald-300 text-xs py-2 px-4 flex items-center gap-2">
             <Check size={14} />
             <span>{savedSuccess}</span>
           </div>
@@ -643,6 +648,7 @@ const Sidebar = ({
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-5 space-y-6">
+          {normalizedTab === 'accessibility' && <AccessibilitySettings />}
           {/* TAB 1: WALLPAPER */}
           {normalizedTab === 'wallpaper' && (
             <div className="space-y-5">
@@ -667,7 +673,7 @@ const Sidebar = ({
                     accept="image/*,video/mp4,video/webm,video/ogg,video/quicktime"
                     disabled={uploadingWallpaper}
                     onChange={handleFileUpload}
-                    className="hidden"
+                    className="sr-only"
                   />
                 </label>
               </div>
@@ -679,6 +685,7 @@ const Sidebar = ({
                   <input
                     type="url"
                     placeholder="https://... (.jpg, .png, .mp4, .webm)"
+                    aria-label="Wallpaper image or video URL"
                     value={customWallpaperUrl}
                     onChange={(e) => setCustomWallpaperUrl(e.target.value)}
                     className="flex-1 px-3 py-2 bg-black/40 border border-white/15 rounded-lg text-xs text-white placeholder-gray-500 focus:outline-none focus:border-blue-400"
@@ -890,6 +897,7 @@ const Sidebar = ({
                   <input
                     type="password"
                     placeholder="AIza..."
+                    aria-label="Gemini widget API key"
                     value={geminiApiKey}
                     onChange={(e) => setGeminiApiKey(e.target.value)}
                     className="flex-1 px-3 py-1.5 bg-black/40 border border-white/15 rounded-lg text-xs text-white placeholder-gray-500 focus:outline-none focus:border-indigo-400 font-mono"
@@ -990,6 +998,7 @@ const Sidebar = ({
                           type="text"
                           required
                           placeholder="e.g. YouTube, Spotify, GitHub"
+                          aria-label="Speed dial name"
                           value={newSpeedDial.name}
                           onChange={handleSpeedDialNameChange}
                           className="w-full px-3 py-1.5 bg-black/40 border border-white/15 rounded-lg text-xs text-white placeholder-gray-500 focus:outline-none focus:border-blue-400"
@@ -1001,6 +1010,7 @@ const Sidebar = ({
                           type="text"
                           required
                           placeholder="e.g. youtube.com"
+                          aria-label="Speed dial URL"
                           value={newSpeedDial.url}
                           onChange={handleSpeedDialUrlChange}
                           className="w-full px-3 py-1.5 bg-black/40 border border-white/15 rounded-lg text-xs text-white placeholder-gray-500 focus:outline-none focus:border-blue-400"
@@ -1105,6 +1115,7 @@ const Sidebar = ({
                           type="text"
                           required
                           placeholder="e.g. GitHub"
+                          aria-label="Favorite name"
                           value={newItem.name}
                           onChange={handleFavNameChange}
                           className="w-full px-3 py-1.5 bg-black/40 border border-white/15 rounded-lg text-xs text-white placeholder-gray-500 focus:outline-none focus:border-blue-400"
@@ -1116,6 +1127,7 @@ const Sidebar = ({
                           type="text"
                           required
                           placeholder="e.g. github.com"
+                          aria-label="Favorite URL"
                           value={newItem.url}
                           onChange={handleFavUrlChange}
                           className="w-full px-3 py-1.5 bg-black/40 border border-white/15 rounded-lg text-xs text-white placeholder-gray-500 focus:outline-none focus:border-blue-400"
@@ -1223,13 +1235,16 @@ const Sidebar = ({
                           </span>
                         </div>
                         <p className="text-xs text-gray-300/80 mt-1 leading-relaxed">
-                          Eliminates heavy GPU blur (<code className="text-[11px] bg-black/40 px-1 py-0.5 rounded">blur: 0px</code>), pauses video wallpapers, replaces transparencies with solid glass, and turns off continuous CSS animations. Ensures buttery-smooth 60 FPS on integrated GPUs.
+                          Reduces background effects, pauses video wallpapers, and uses solid surfaces to reduce work on your device.
                         </p>
                       </div>
                     </div>
                     <button
                       type="button"
                       onClick={() => handleToggleFeature('liteMode')}
+                      role="switch"
+                      aria-checked={features.liteMode}
+                      aria-label="Lite mode"
                       className={`w-12 h-6 flex items-center rounded-full p-1 transition-colors cursor-pointer shrink-0 ${
                         features.liteMode ? 'bg-amber-500 justify-end' : 'bg-white/20 justify-start'
                       }`}
@@ -1272,6 +1287,9 @@ const Sidebar = ({
                     <button
                       type="button"
                       onClick={() => handleToggleFeature('standbyMode')}
+                      role="switch"
+                      aria-checked={features.standbyMode}
+                      aria-label="Reading mode"
                       className={`w-12 h-6 flex items-center rounded-full p-1 transition-colors cursor-pointer shrink-0 ${
                         features.standbyMode ? 'bg-indigo-500 justify-end' : 'bg-white/20 justify-start'
                       }`}
@@ -1338,6 +1356,9 @@ const Sidebar = ({
                         <button
                           type="button"
                           onClick={() => handleToggleFeature(item.key)}
+                          role="switch"
+                          aria-checked={isEnabled}
+                          aria-label={item.name}
                           className={`w-10 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer shrink-0 ${
                             isEnabled ? 'bg-blue-600 justify-end' : 'bg-white/15 justify-start'
                           }`}
@@ -1514,6 +1535,7 @@ const Sidebar = ({
                               type="email"
                               required
                               placeholder="Email address"
+                              aria-label="Email address"
                               value={emailInput}
                               onChange={(e) => setEmailInput(e.target.value)}
                               className="w-full px-3 py-1.5 bg-black/40 border border-white/15 rounded-lg text-xs text-white placeholder-gray-500 focus:outline-none focus:border-purple-400"
@@ -1523,6 +1545,7 @@ const Sidebar = ({
                               required
                               minLength={6}
                               placeholder="Password (min 6 chars)"
+                              aria-label="Password, at least 6 characters"
                               value={passwordInput}
                               onChange={(e) => setPasswordInput(e.target.value)}
                               className="w-full px-3 py-1.5 bg-black/40 border border-white/15 rounded-lg text-xs text-white placeholder-gray-500 focus:outline-none focus:border-purple-400"
@@ -1569,6 +1592,7 @@ const Sidebar = ({
                   <input
                     type="text"
                     placeholder="Cloudinary Cloud Name (optional)"
+                    aria-label="Cloudinary cloud name, optional"
                     value={cloudinaryCfg.cloudName}
                     onChange={(e) => setCloudinaryCfg({ ...cloudinaryCfg, cloudName: e.target.value })}
                     className="w-full px-3 py-1.5 bg-black/40 border border-white/15 rounded-lg text-xs text-white placeholder-gray-500 focus:outline-none focus:border-purple-400"
@@ -1576,6 +1600,7 @@ const Sidebar = ({
                   <input
                     type="text"
                     placeholder="Unsigned Upload Preset"
+                    aria-label="Cloudinary unsigned upload preset"
                     value={cloudinaryCfg.uploadPreset}
                     onChange={(e) => setCloudinaryCfg({ ...cloudinaryCfg, uploadPreset: e.target.value })}
                     className="w-full px-3 py-1.5 bg-black/40 border border-white/15 rounded-lg text-xs text-white placeholder-gray-500 focus:outline-none focus:border-purple-400"

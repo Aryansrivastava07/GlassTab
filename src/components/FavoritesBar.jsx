@@ -179,6 +179,7 @@ const FavoritesBar = () => {
               <input
                 type="text"
                 placeholder="Name (e.g. GitHub)"
+                aria-label="Favorite name"
                 value={newItem.name}
                 onChange={handleNameChange}
                 className="px-3 py-2 bg-black/40 border border-white/15 rounded-lg text-white placeholder-gray-400 text-sm focus:outline-none focus:border-blue-400"
@@ -187,6 +188,7 @@ const FavoritesBar = () => {
               <input
                 type="text"
                 placeholder="URL (e.g. github.com)"
+                aria-label="Website URL"
                 value={newItem.url}
                 onChange={handleUrlChange}
                 className="px-3 py-2 bg-black/40 border border-white/15 rounded-lg text-white placeholder-gray-400 text-sm focus:outline-none focus:border-blue-400"
@@ -195,6 +197,7 @@ const FavoritesBar = () => {
               <input
                 type="text"
                 placeholder="Icon URL (optional)"
+                aria-label="Icon URL, optional"
                 value={newItem.icon}
                 onChange={(e) => setNewItem({ ...newItem, icon: e.target.value })}
                 className="px-3 py-2 bg-black/40 border border-white/15 rounded-lg text-white placeholder-gray-400 text-sm focus:outline-none focus:border-blue-400"
@@ -239,10 +242,9 @@ const FavoritesBar = () => {
               return (
                 <div
                   key={favorite.id}
-                  onClick={() => { window.location.href = favorite.url; }}
                   className="flex items-center justify-between p-2.5 bg-black/30 hover:bg-white/10 rounded-xl border border-white/10 hover:border-white/25 transition-all duration-200 group cursor-pointer"
                 >
-                  <div className="flex items-center space-x-3 flex-1 min-w-0">
+                  <a href={favorite.url} aria-label={`Open ${favorite.name}`} className="flex items-center space-x-3 flex-1 min-w-0 rounded-lg">
                     <div className="w-8 h-8 rounded-lg bg-black/40 border border-white/10 flex items-center justify-center shrink-0 overflow-hidden">
                       <SiteThumbnail
                         logo={iconSrc}
@@ -266,8 +268,8 @@ const FavoritesBar = () => {
                         {favorite.url.replace(/^https?:\/\//i, '')}
                       </p>
                     </div>
-                  </div>
-                  <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                  </a>
+                  <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-200">
                     <a
                       href={favorite.url}
                       target="_blank"
@@ -276,6 +278,7 @@ const FavoritesBar = () => {
                       style={{ color: getMutedTextStyleForPart(favTheme, 70).color }}
                       className="p-1.5 hover:text-blue-400 hover:bg-white/10 rounded-lg transition-colors"
                       title="Open in new tab"
+                      aria-label={`Open ${favorite.name} in a new tab`}
                     >
                       <ExternalLink size={14} />
                     </a>
@@ -284,6 +287,7 @@ const FavoritesBar = () => {
                       style={{ color: getMutedTextStyleForPart(favTheme, 70).color }}
                       className="p-1.5 hover:text-red-400 hover:bg-white/10 rounded-lg transition-colors cursor-pointer"
                       title="Delete favorite"
+                      aria-label={`Delete ${favorite.name} favorite`}
                     >
                       <Trash2 size={14} />
                     </button>

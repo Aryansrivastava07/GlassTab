@@ -1,104 +1,65 @@
-import React, { useEffect, useRef, useState } from "react";
-import "./AnalogClock.css";
-import { getGlassTheme, getGlassStyleForPart, getLuminance } from "../utils/glassThemeService";
+import { useEffect, useRef, useState } from 'react';
+import './AnalogClock.css';
+import { getGlassTheme, getGlassStyleForPart, getLuminance } from '../utils/glassThemeService';
+import useReducedMotion from '../hooks/useReducedMotion';
 
 const AnalogClock = () => {
   const containerRef = useRef(null);
   const [diameter, setDiameter] = useState(130);
-  const [glassTheme, setGlassTheme] = useState(() => getGlassTheme());
+  const [now, setNow] = useState(() => new Date());
+  const [glassTheme, setGlassTheme] = useState(getGlassTheme);
+  const reducedMotion = useReducedMotion();
 
   useEffect(() => {
-    const handleUpdate = (e) => {
-      if (e.detail) setGlassTheme(e.detail);
-    };
-    window.addEventListener('glassThemeUpdate', handleUpdate);
-    return () => window.removeEventListener('glassThemeUpdate', handleUpdate);
+    const update = (event) => { if (event.detail) setGlassTheme(event.detail); };
+    window.addEventListener('glassThemeUpdate', update);
+    return () => window.removeEventListener('glassThemeUpdate', update);
   }, []);
 
   useEffect(() => {
-    if (!containerRef.current) return;
-    const ro = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const minDim = Math.min(entry.contentRect.width, entry.contentRect.height);
-        if (minDim > 50) {
-          setDiameter(Math.round(minDim));
-        }
-      }
+    const observer = new ResizeObserver(([entry]) => {
+      const size = Math.min(entry.contentRect.width, entry.contentRect.height);
+      if (size > 50) setDiameter(Math.round(size));
     });
-    ro.observe(containerRef.current);
-    return () => ro.disconnect();
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
   }, []);
 
   useEffect(() => {
-    const setInitialTime = () => {
-      const now = new Date();
-      const hours = now.getHours();
-      const minutes = now.getMinutes();
-      const seconds = now.getSeconds();
-
-      const hourHand = document.getElementById("hour");
-      const minuteHand = document.getElementById("minute");
-      const secondHand = document.getElementById("second");
-
-      if (hourHand && minuteHand && secondHand) {
-        hourHand.style.setProperty(
-          "--hr-deg-start",
-          `${(hours + minutes / 60) * 30 - 180}deg`,
-        );
-        hourHand.style.setProperty(
-          "--hr-deg-end",
-          `${(hours + minutes / 60) * 30 + 180}deg`,
-        );
-
-        minuteHand.style.setProperty(
-          "--mn-deg-start",
-          `${(minutes + seconds / 60) * 6 - 180}deg`,
-        );
-        minuteHand.style.setProperty(
-          "--mn-deg-end",
-          `${(minutes + seconds / 60) * 6 + 180}deg`,
-        );
-
-        secondHand.style.setProperty(
-          "--sc-deg-start",
-          `${seconds * 6 - 180}deg`,
-        );
-        secondHand.style.setProperty("--sc-deg-end", `${seconds * 6 + 180}deg`);
-      }
+    let timer;
+    const tick = () => {
+      clearTimeout(timer);
+      if (document.hidden) return;
+      setNow(new Date());
+      const interval = reducedMotion ? 60_000 : 1_000;
+      timer = setTimeout(tick, interval - Date.now() % interval);
     };
-
-    setInitialTime();
-  }, []);
+    tick();
+    document.addEventListener('visibilitychange', tick);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener('visibilitychange', tick);
+    };
+  }, [reducedMotion]);
 
   const widgetTheme = glassTheme?.widgets;
   const isLightBg = getLuminance(widgetTheme?.color || '#000000') > 0.55;
-  const faceFilter = isLightBg ? 'none' : 'invert(1)';
-  const handColor = widgetTheme?.textColor || (isLightBg ? '#111827' : '#ffffff');
+  const timeLabel = now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  const rotation = (degrees) => ({ animation: 'none', rotate: `${degrees - 180}deg` });
 
   return (
-    <div ref={containerRef} className="w-full h-full flex items-center justify-center overflow-hidden rounded-full">
-      <div
-        className="clock shrink-0"
-        style={{
-          "--clock-diameter": `${diameter}px`,
-          "--clock-size": `${diameter}px`,
-          "--clock-face-filter": faceFilter,
-          "--clock-hand-color": handColor,
-          ...getGlassStyleForPart(widgetTheme),
-        }}
-      >
+    <div ref={containerRef} role="img" aria-label={`Current time: ${timeLabel}`} className="w-full h-full flex items-center justify-center overflow-hidden rounded-full">
+      <div className="clock shrink-0" aria-hidden="true" style={{
+        '--clock-diameter': `${diameter}px`, '--clock-size': `${diameter}px`,
+        '--clock-face-filter': isLightBg ? 'none' : 'invert(1)',
+        '--clock-hand-color': widgetTheme?.textColor || (isLightBg ? '#111827' : '#ffffff'),
+        ...getGlassStyleForPart(widgetTheme),
+      }}>
+        <div>{Array.from({ length: 6 }, (_, index) => <div key={index} className="clockDial" />)}</div>
         <div>
-          <div className="clockDial"></div>
-          <div className="clockDial"></div>
-          <div className="clockDial"></div>
-          <div className="clockDial"></div>
-          <div className="clockDial"></div>
-          <div className="clockDial"></div>
-        </div>
-        <div>
-          <div className="clockHand" id="minute"></div>
-          <div className="clockHand" id="hour"></div>
-          <div className="clockHand" id="second"></div>
+          <div className="clockHand" id="minute" style={rotation(now.getMinutes() * 6)} />
+          <div className="clockHand" id="hour" style={rotation((now.getHours() + now.getMinutes() / 60) * 30)} />
+          {!reducedMotion && <div className="clockHand" id="second" style={rotation(now.getSeconds() * 6)} />}
         </div>
       </div>
     </div>

@@ -147,6 +147,7 @@ const WeatherWidget = () => {
               value={inputVal}
               onChange={(e) => setInputVal(e.target.value)}
               placeholder="City name..."
+              aria-label="Weather city"
               className="w-full px-2 py-1 bg-white/10 border border-white/20 rounded text-xs text-white placeholder-gray-400 focus:outline-none focus:border-blue-400"
             />
             <button type="submit" className="p-1 hover:text-green-400 transition-colors" title="Save">
@@ -162,7 +163,7 @@ const WeatherWidget = () => {
             </button>
           </form>
         ) : (
-          <div
+          <button type="button"
             className="flex items-center gap-1.5 cursor-pointer group text-xs transition-colors"
             style={getTextStyleForPart(widgetTheme)}
             onClick={() => {
@@ -174,7 +175,7 @@ const WeatherWidget = () => {
             <MapPin size={13} className="text-red-400 shrink-0" />
             <span className="font-medium truncate max-w-[140px]">{weather?.city || location}</span>
             <Edit2 size={11} className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400" />
-          </div>
+          </button>
         )}
 
         {!isEditing && (

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
+import useDialogFocus from '../hooks/useDialogFocus';
 import {
   X,
   Sparkles,
@@ -67,6 +68,8 @@ const CustomWidgetStudio = ({
   onSaveWidget,
   editingWidget = null,
 }) => {
+  const dialogRef = useRef(null);
+  useDialogFocus(dialogRef, isOpen, onClose);
   const { firebaseUser, isGuest } = useAuth();
   const googleAuthed = !isGuest && isGoogleSignedIn(firebaseUser);
 
@@ -476,7 +479,7 @@ const CustomWidgetStudio = ({
         </div>
       )}
 
-      <div className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-5">
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Widget store and studio" tabIndex={-1} className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-5">
         {/* Backdrop */}
         <div className="absolute inset-0 bg-black/80 backdrop-blur-xs" onClick={onClose} />
 

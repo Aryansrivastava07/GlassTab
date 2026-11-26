@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useRef, lazy, Suspense } from 'react';
+import useDialogFocus from '../hooks/useDialogFocus';
 import {
   RotateCcw,
   Layers,
@@ -11,9 +12,12 @@ import {
   Cloud,
   Zap,
   BookOpen,
+  Accessibility,
+  Download,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import Sidebar from './Sidebar';
+import useExtensionUpdate from '../hooks/useExtensionUpdate';
+const Sidebar = lazy(() => import('./Sidebar'));
 
 const NAV_CATEGORIES = [
   { id: 'appearance', label: 'Wallpaper', icon: ImageIcon, title: 'Appearance & Wallpapers' },
@@ -21,6 +25,7 @@ const NAV_CATEGORIES = [
   { id: 'widgets', label: 'Widgets', icon: LayoutGrid, title: 'Widgets, Layout & AI' },
   { id: 'shortcuts', label: 'Shortcuts', icon: Heart, title: 'Saved Shortcuts' },
   { id: 'performance', label: 'Performance', icon: Zap, title: 'Lite Mode, Standby Mode & Feature Toggles' },
+  { id: 'accessibility', label: 'Accessibility', icon: Accessibility, title: 'Reading, Motion & Keyboard Settings' },
   { id: 'account', label: 'Sync', icon: Cloud, title: 'Account, Sync & Media' },
 ];
 
@@ -39,17 +44,15 @@ const Navbar = ({
   const { currentUser, isGuest } = useAuth();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('appearance');
+  const update = useExtensionUpdate();
 
-  useEffect(() => {
-    if (!isMenuOpen) return undefined;
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape') {
-        setIsMenuOpen(false);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isMenuOpen]);
+  const dialogRef = useRef(null);
+  const triggerRef = useRef(null);
+  const closeMenu = () => {
+    setIsMenuOpen(false);
+    requestAnimationFrame(() => triggerRef.current?.focus());
+  };
+  useDialogFocus(dialogRef, isMenuOpen, closeMenu);
 
   const isSignedIn = !isGuest && Boolean(currentUser?.uid);
 
@@ -80,19 +83,31 @@ const Navbar = ({
   };
 
   return (
-    <>
+    <div ref={dialogRef} role={isMenuOpen ? 'dialog' : undefined} aria-modal={isMenuOpen ? 'true' : undefined} aria-label="Dashboard settings" tabIndex={-1}>
       {/* Subtle click-outside backdrop when expanded */}
       {isMenuOpen && (
         <div
           className="fixed inset-0 z-40 bg-black/45 backdrop-blur-[2px] transition-opacity"
-          onClick={() => setIsMenuOpen(false)}
+          onClick={closeMenu}
         />
       )}
 
-      <nav className="relative z-50 pointer-events-auto flex flex-col items-end gap-1.5">
+      <nav aria-label="Dashboard controls" className="relative z-50 pointer-events-auto flex flex-col items-end gap-1.5">
         {!isMenuOpen ? (
           /* Homepage Collapsed State: Standby Mode 1-click button + Profile icon */
           <div className="flex items-center gap-1.5">
+            {update && (
+              <a
+                href="https://aryansrivastava07.github.io/GlassTab/update/"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="GlassTab update available; open updater"
+                title={`Update available: ${update.version || update.buildId.slice(0, 8)}`}
+                className="flex items-center gap-1 rounded-full border border-sky-300/60 bg-sky-950/90 px-2 py-1 text-xs font-semibold text-sky-100 hover:bg-sky-800"
+              >
+                <Download size={14} /> Update
+              </a>
+            )}
             {onToggleStandby && (
               <button
                 type="button"
@@ -109,7 +124,11 @@ const Navbar = ({
             )}
 
             <button
+              ref={triggerRef}
               type="button"
+              aria-label="Open dashboard settings"
+              aria-haspopup="dialog"
+              aria-expanded={isMenuOpen}
               onClick={() => setIsMenuOpen(true)}
               className={`p-1 rounded-full backdrop-blur-md border transition-all cursor-pointer shadow-lg ${
                 isSignedIn
@@ -155,7 +174,7 @@ const Navbar = ({
                   onOpenAiStudio();
                 }}
                 className="p-1.5 text-sky-300 hover:text-white hover:bg-sky-500/20 rounded-full transition-all cursor-pointer shrink-0"
-                title="Open AI Studio (Gemini 3.8 Flash)"
+                title="Open AI Studio"
               >
                 <Sparkles size={15} />
               </button>
@@ -199,6 +218,7 @@ const Navbar = ({
                     type="button"
                     onClick={() => setActiveTab(cat.id)}
                     title={cat.title}
+                    aria-pressed={active}
                     className={`px-2.5 py-1 rounded-full text-[11px] font-medium flex items-center gap-1.5 transition-all cursor-pointer shrink-0 ${
                       active
                         ? 'bg-white/18 text-white border border-white/25 shadow-sm'
@@ -217,7 +237,7 @@ const Navbar = ({
             {/* Right-anchored Profile Toggle (collapses pill & floating bar) */}
             <button
               type="button"
-              onClick={() => setIsMenuOpen(false)}
+              onClick={closeMenu}
               className={`p-0.5 rounded-full border transition-all cursor-pointer shrink-0 ${
                 isSignedIn
                   ? 'border-blue-400/70 ring-2 ring-blue-400/20'
@@ -232,10 +252,10 @@ const Navbar = ({
       </nav>
 
       {/* Categorized Floating Settings Bar opened below the expanded pill */}
-      <Sidebar
+      {isMenuOpen && <Suspense fallback={<div className="loading-panel" role="status">Loading settings…</div>}><Sidebar
         isOpen={isMenuOpen}
         activeTab={activeTab}
-        onClose={() => setIsMenuOpen(false)}
+        onClose={closeMenu}
         isDragEnabled={isDragEnabled}
         onToggleDrag={onToggleDrag}
         onResetLayout={onResetLayout}
@@ -249,8 +269,8 @@ const Navbar = ({
           if (onEditWidget) onEditWidget(w);
         }}
         onDeleteWidget={onDeleteWidget}
-      />
-    </>
+      /></Suspense>}
+    </div>
   );
 };
 

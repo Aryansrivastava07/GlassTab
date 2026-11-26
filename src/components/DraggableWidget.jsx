@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { GripHorizontal } from 'lucide-react';
 import { getViewportSize, toPixelLayout, toViewportLayout } from '../utils/layoutService';
 
@@ -103,7 +103,7 @@ const DraggableWidget = ({
   // --- DRAG HANDLERS ---
   const handleDragStart = (clientX, clientY, target) => {
     if (!draggable) return;
-    if (target.closest('button, a, input, textarea, select, [data-no-drag="true"], .resize-handle')) {
+    if (target.closest('button:not([data-widget-move]), a, input, textarea, select, [data-no-drag="true"], .resize-handle')) {
       return;
     }
 
@@ -152,6 +152,7 @@ const DraggableWidget = ({
 
   // --- GLOBAL MOVE & UP LISTENERS ---
   useEffect(() => {
+    if (!draggable && !resizable) return;
     const handleMove = (clientX, clientY) => {
       // 1. Resizing
       if (resizeRef.current.isResizing) {
@@ -256,7 +257,31 @@ const DraggableWidget = ({
       window.removeEventListener('touchmove', handleTouchMove);
       window.removeEventListener('touchend', handleEnd);
     };
-  }, [clampPos, id, minHeight, minWidth, onLayoutChange, viewport]);
+  }, [clampPos, id, minHeight, minWidth, onLayoutChange, viewport, draggable, resizable]);
+
+  const handleKeyboardLayout = (event) => {
+    const directions = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+    const direction = directions[event.key];
+    if (!direction || event.altKey || event.metaKey || event.ctrlKey) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const [dx, dy] = direction.map(value => value * 10);
+    let size = sizeRef.current;
+    let position = posRef.current;
+    if (event.shiftKey && resizable) {
+      size = {
+        width: Math.max(minWidth, Math.min(size.width + dx, viewport.width - position.x - 10)),
+        height: Math.max(minHeight, Math.min(size.height + dy, viewport.height - position.y - 10)),
+      };
+    } else if (!event.shiftKey && draggable) {
+      position = clampPos(position.x + dx, position.y + dy, size.width, size.height);
+    }
+    posRef.current = position;
+    sizeRef.current = size;
+    setCurrentPos(position);
+    setCurrentSize(size);
+    onLayoutChange?.(id, toViewportLayout({ ...position, ...size }, viewport));
+  };
 
   return (
     <div
@@ -273,7 +298,7 @@ const DraggableWidget = ({
         maxHeight: 'calc(100vh - 20px)',
         boxSizing: 'border-box',
         zIndex: isDragging || isResizing ? 45 : 20,
-        touchAction: 'none',
+        touchAction: draggable || resizable ? 'none' : 'auto',
         willChange: isDragging || isResizing ? 'left, top, width, height' : 'auto',
         isolation: 'isolate',
       }}
@@ -287,10 +312,13 @@ const DraggableWidget = ({
     >
       {/* Move Pill Handle on Top (Visible on hover when draggable is enabled) */}
       {draggable && (
-        <div className="drag-handle absolute -top-5 left-1/2 -translate-x-1/2 opacity-0 group-hover/widget:opacity-100 transition-opacity duration-200 z-30 cursor-grab active:cursor-grabbing flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-black/75 hover:bg-black/95 border border-white/20 text-white/70 hover:text-white text-[11px] font-medium shadow-md backdrop-blur-xs select-none pointer-events-auto">
+        <button type="button" data-widget-move="true" onKeyDown={handleKeyboardLayout}
+          aria-label={`Move ${title || 'widget'} with arrow keys; resize with Shift and arrow keys`}
+          title="Arrow keys to move; Shift + arrow keys to resize"
+          className="drag-handle absolute -top-5 left-1/2 -translate-x-1/2 opacity-0 group-hover/widget:opacity-100 group-focus-within/widget:opacity-100 focus:opacity-100 transition-opacity duration-200 z-30 cursor-grab active:cursor-grabbing flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-black/75 hover:bg-black/95 border border-white/20 text-white/70 hover:text-white text-[11px] font-medium shadow-md backdrop-blur-xs select-none pointer-events-auto">
           <GripHorizontal size={12} />
           <span>{title ? `Move ${title}` : 'Move'}</span>
-        </div>
+        </button>
       )}
 
       {/* Widget Content (Full size of draggable frame) */}

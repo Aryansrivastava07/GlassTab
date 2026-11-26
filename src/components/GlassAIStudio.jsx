@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import useDialogFocus from '../hooks/useDialogFocus';
 import {
   Sparkles,
   Plus,
@@ -206,6 +207,10 @@ export const GlassAIStudio = ({ onScrollToDashboard, isActive = true }) => {
   const [showCharacterMenu, setShowCharacterMenu] = useState(false);
   const [showCustomCharModal, setShowCustomCharModal] = useState(false);
   const [showApiKeyModal, setShowApiKeyModal] = useState(false);
+  const characterDialogRef = useRef(null);
+  const keyDialogRef = useRef(null);
+  useDialogFocus(characterDialogRef, isActive && showCustomCharModal, () => setShowCustomCharModal(false));
+  useDialogFocus(keyDialogRef, isActive && showApiKeyModal, () => setShowApiKeyModal(false));
   const [aiSettings, setAiSettings] = useState(getAiSettings);
   const provider = aiSettings.provider;
   const providerInfo = AI_PROVIDERS[provider];
@@ -1184,7 +1189,7 @@ export const GlassAIStudio = ({ onScrollToDashboard, isActive = true }) => {
         </div>
 
         {/* Message Stream Area */}
-        <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
+        <div ref={messagesContainerRef} role="log" aria-label="Chat messages" aria-live="polite" className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
           
           {/* Missing API Key Banner */}
               {!hasKey && (
@@ -1398,11 +1403,12 @@ export const GlassAIStudio = ({ onScrollToDashboard, isActive = true }) => {
             {/* Textarea */}
             <textarea
               rows={1}
+              aria-label={`Message ${activeCharacter.name}`}
               value={inputMessage}
               disabled={isGenerating}
               onChange={(e) => setInputMessage(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
+                if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
                   e.preventDefault();
                   handleSendMessage();
                 }
@@ -1418,6 +1424,7 @@ export const GlassAIStudio = ({ onScrollToDashboard, isActive = true }) => {
             {/* Send Button */}
             <button
               onClick={() => handleSendMessage()}
+              aria-label="Send message"
               disabled={!inputMessage.trim() || isGenerating}
               className="p-2.5 rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 disabled:opacity-30 disabled:cursor-not-allowed text-white shadow-md shadow-sky-500/20 transition cursor-pointer active:scale-95"
             >
@@ -1430,7 +1437,7 @@ export const GlassAIStudio = ({ onScrollToDashboard, isActive = true }) => {
 
       {/* ================= MODAL 1: BUILD CUSTOM CHARACTER ================= */}
       {showCustomCharModal && (
-        <div className="fixed inset-0 z-[100000] flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fadeIn">
+        <div ref={characterDialogRef} role="dialog" aria-modal="true" aria-label="Build custom character" tabIndex={-1} className="fixed inset-0 z-[100000] flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fadeIn">
           <div className="w-full max-w-md bg-[#121622] border border-white/15 rounded-3xl p-6 shadow-2xl space-y-4">
             <div className="flex items-center justify-between border-b border-white/10 pb-3">
               <h3 className="text-base font-bold text-white flex items-center gap-2">
@@ -1463,6 +1470,7 @@ export const GlassAIStudio = ({ onScrollToDashboard, isActive = true }) => {
                     type="text"
                     required
                     placeholder="e.g. Code Architect, Socrates"
+                    aria-label="Character name"
                     value={newCharName}
                     onChange={(e) => setNewCharName(e.target.value)}
                     className="w-full px-3 py-1.5 bg-black/40 border border-white/15 rounded-xl text-xs text-white placeholder-gray-500 focus:outline-none focus:border-sky-400"
@@ -1475,6 +1483,7 @@ export const GlassAIStudio = ({ onScrollToDashboard, isActive = true }) => {
                 <input
                   type="text"
                   placeholder="e.g. Master of clean code and system design"
+                  aria-label="Character description"
                   value={newCharTagline}
                   onChange={(e) => setNewCharTagline(e.target.value)}
                   className="w-full px-3 py-1.5 bg-black/40 border border-white/15 rounded-xl text-xs text-white placeholder-gray-500 focus:outline-none focus:border-sky-400"
@@ -1489,6 +1498,7 @@ export const GlassAIStudio = ({ onScrollToDashboard, isActive = true }) => {
                   rows={4}
                   required
                   placeholder="Describe how this character talks, behaves, and what rules it follows..."
+                  aria-label="Character instructions"
                   value={newCharPrompt}
                   onChange={(e) => setNewCharPrompt(e.target.value)}
                   className="w-full px-3 py-2 bg-black/40 border border-white/15 rounded-xl text-xs text-white placeholder-gray-500 focus:outline-none focus:border-sky-400 resize-none leading-relaxed"
@@ -1517,7 +1527,7 @@ export const GlassAIStudio = ({ onScrollToDashboard, isActive = true }) => {
 
       {/* ================= MODAL 2: API KEY SETUP ================= */}
       {showApiKeyModal && (
-        <div className="fixed inset-0 z-[100000] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
+        <div ref={keyDialogRef} role="dialog" aria-modal="true" aria-label="AI provider and API key" tabIndex={-1} className="fixed inset-0 z-[100000] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
           <div className="w-full max-w-md bg-[#121622] border border-white/15 rounded-3xl p-6 shadow-2xl space-y-4 text-center">
             <div className="w-14 h-14 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-300 flex items-center justify-center mx-auto shadow-lg shadow-amber-500/10">
               <KeyRound size={26} />
@@ -1588,6 +1598,7 @@ export const GlassAIStudio = ({ onScrollToDashboard, isActive = true }) => {
                     type={showKeyPassword ? 'text' : 'password'}
                     required
                     placeholder={`${providerInfo.label} API key`}
+                    aria-label={`${providerInfo.label} API key`}
                     value={apiKeyInput}
                     onChange={(e) => setApiKeyInput(e.target.value)}
                     className="w-full px-3.5 py-2.5 pr-10 bg-black/40 border border-white/20 rounded-xl text-xs text-white placeholder-gray-500 focus:outline-none focus:border-amber-400 font-mono"

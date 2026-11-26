@@ -1,6 +1,5 @@
 // Import the functions you need from the SDKs you need
 import { initializeApp } from "firebase/app";
-import { getAnalytics, isSupported } from "firebase/analytics";
 import {
   getAuth,
   initializeAuth,
@@ -31,25 +30,6 @@ const firebaseConfig = {
 
 // Initialize Firebase
 export const app = initializeApp(firebaseConfig);
-
-// Initialize Analytics safely (strictly disabled in extension chrome-extension:// origins to prevent CSP violations)
-export let analytics = null;
-const isExtensionEnv = typeof window !== 'undefined' && (
-  window.location.protocol === 'chrome-extension:' ||
-  (typeof chrome !== 'undefined' && Boolean(chrome?.runtime?.id))
-);
-
-if (!isExtensionEnv) {
-  isSupported().then((supported) => {
-    if (supported) {
-      try {
-        analytics = getAnalytics(app);
-      } catch {
-        // Ignored
-      }
-    }
-  }).catch(() => {});
-}
 
 // Initialize Firebase Authentication with fallback persistence (IndexedDB -> LocalStorage -> Memory)
 let authInstance;

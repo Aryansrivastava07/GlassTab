@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
+import useDialogFocus from '../hooks/useDialogFocus';
 import { Plus, X } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import {
@@ -35,6 +36,8 @@ const SpeedDials = ({ onCountChange }) => {
   });
   const [loading, setLoading] = useState(false);
   const [showAddDialog, setShowAddDialog] = useState(false);
+  const dialogRef = useRef(null);
+  useDialogFocus(dialogRef, showAddDialog, () => setShowAddDialog(false));
   const [newItem, setNewItem] = useState({ name: "", url: "", logo: "" });
   const [urlSuggestions, setUrlSuggestions] = useState([]);
   const [isUrlManuallyEdited, setIsUrlManuallyEdited] = useState(false);
@@ -186,7 +189,7 @@ const SpeedDials = ({ onCountChange }) => {
       <button
         onClick={() => setShowAddDialog(true)}
         style={{ color: getMutedTextStyleForPart(glassTheme.speedDial, 70).color }}
-        className="absolute top-1.5 right-1.5 p-1 hover:text-white hover:bg-white/10 rounded-lg transition-all duration-200 opacity-0 group-hover:opacity-100 cursor-pointer z-10"
+        className="absolute top-1.5 right-1.5 p-1 hover:text-white hover:bg-white/10 rounded-lg transition-all duration-200 opacity-100 sm:opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 cursor-pointer z-10"
         title="Add Shortcut"
       >
         <Plus size={14} />
@@ -197,9 +200,9 @@ const SpeedDials = ({ onCountChange }) => {
         {speedDials.map((item) => (
           <div
             key={item.id}
-            onClick={() => { window.location.href = item.url; }}
             className="flex flex-col items-center justify-center p-1.5 rounded-xl hover:bg-white/10 transition-all duration-200 group/item relative cursor-pointer w-16 sm:w-20"
           >
+            <a href={item.url} aria-label={`Open ${item.name}`} className="flex flex-col items-center rounded-lg">
             {/* Icon Tile */}
             <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-black/40 border border-white/15 flex items-center justify-center shadow-md group-hover/item:scale-105 group-hover/item:border-white/35 group-hover/item:shadow-blue-500/20 group-hover/item:shadow-lg transition-all duration-200 overflow-hidden">
               <SiteThumbnail
@@ -217,11 +220,13 @@ const SpeedDials = ({ onCountChange }) => {
             >
               {item.name}
             </p>
+            </a>
 
             {/* Delete button */}
             <button
               onClick={(e) => handleDeleteItem(e, item.id)}
-              className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center opacity-0 group-hover/item:opacity-100 transition-opacity shadow-lg cursor-pointer"
+              aria-label={`Delete ${item.name} shortcut`}
+              className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center opacity-0 group-hover/item:opacity-100 group-focus-within/item:opacity-100 transition-opacity shadow-lg cursor-pointer"
               title="Delete shortcut"
             >
               <X size={11} />
@@ -231,7 +236,7 @@ const SpeedDials = ({ onCountChange }) => {
 
         {/* 2. Dotted Thumbnail Areas for Empty Columns when having extra width */}
         {Array.from({ length: emptySlotsCount }).map((_, index) => (
-          <div
+          <button type="button"
             key={`empty-slot-${index}`}
             onClick={() => setShowAddDialog(true)}
             className="flex flex-col items-center justify-center p-1.5 rounded-xl group/slot cursor-pointer w-16 sm:w-20 transition-all duration-200"
@@ -253,12 +258,12 @@ const SpeedDials = ({ onCountChange }) => {
             >
               Add
             </p>
-          </div>
+          </button>
         ))}
 
         {/* 3. Initial Add button if there are zero shortcuts */}
         {speedDials.length === 0 && emptySlotsCount === 0 && (
-          <div
+          <button type="button"
             onClick={() => setShowAddDialog(true)}
             className="flex flex-col items-center justify-center p-1.5 rounded-xl hover:bg-white/10 transition-all duration-200 group/slot cursor-pointer w-16 sm:w-20"
             title="Add Shortcut"
@@ -278,7 +283,7 @@ const SpeedDials = ({ onCountChange }) => {
             >
               Add
             </p>
-          </div>
+          </button>
         )}
       </div>
 
@@ -287,6 +292,7 @@ const SpeedDials = ({ onCountChange }) => {
         createPortal(
           <div
             className="fixed inset-0 bg-black/75 z-[99999] flex items-center justify-center p-4 backdrop-blur-xs animate-fadeIn"
+            ref={dialogRef} role="dialog" aria-modal="true" aria-label="Add speed dial" tabIndex={-1}
             onClick={() => setShowAddDialog(false)}
           >
             <div
@@ -298,6 +304,7 @@ const SpeedDials = ({ onCountChange }) => {
                 <button
                   type="button"
                   onClick={resetForm}
+                  aria-label="Close add shortcut"
                   className="text-gray-400 hover:text-white p-1 rounded-lg cursor-pointer"
                 >
                   <X size={18} />
@@ -311,6 +318,7 @@ const SpeedDials = ({ onCountChange }) => {
                     type="text"
                     required
                     placeholder="e.g. YouTube"
+                    aria-label="Shortcut name"
                     value={newItem.name}
                     onChange={handleNameChange}
                     className="w-full px-3 py-2 bg-white/5 border border-white/15 rounded-lg text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-400"
@@ -323,6 +331,7 @@ const SpeedDials = ({ onCountChange }) => {
                     type="text"
                     required
                     placeholder="e.g. youtube.com"
+                    aria-label="Website URL"
                     value={newItem.url}
                     onChange={handleUrlChange}
                     className="w-full px-3 py-2 bg-white/5 border border-white/15 rounded-lg text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-400"
@@ -341,6 +350,7 @@ const SpeedDials = ({ onCountChange }) => {
                   <input
                     type="url"
                     placeholder="Leave empty for auto-favicon"
+                    aria-label="Icon URL, optional"
                     value={newItem.logo}
                     onChange={(e) => setNewItem({ ...newItem, logo: e.target.value })}
                     className="w-full px-3 py-2 bg-white/5 border border-white/15 rounded-lg text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-400"

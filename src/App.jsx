@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback, lazy, Suspense } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback, lazy, Suspense } from "react";
 import { Sparkles, ChevronDown, ChevronUp, LayoutDashboard } from "lucide-react";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import SearchBar from "./components/SearchBar";
@@ -12,7 +12,7 @@ import WeatherWidget from "./components/WeatherWidget";
 import AnalogClock from "./components/AnalogClock";
 import DraggableWidget from "./components/DraggableWidget";
 import CustomWidgetFrame from "./components/CustomWidgetFrame";
-import CustomWidgetStudio from "./components/CustomWidgetStudio";
+import useDialogFocus from './hooks/useDialogFocus';
 import {
   getDefaultLayout,
   getStoredLayout,
@@ -26,6 +26,7 @@ import {
 import {
   getStoredFeatures,
   applyLiteModeCss,
+  applyAccessibilityCss,
   toggleStandbyMode,
 } from "./utils/featureToggleService";
 import { subscribeToUserData, updateUserData } from "./services/databaseService";
@@ -35,6 +36,7 @@ import "./App.css";
 
 // Lazy-load GlassAIStudio for instant dashboard initial load
 const GlassAIStudio = lazy(() => import("./components/GlassAIStudio"));
+const CustomWidgetStudio = lazy(() => import('./components/CustomWidgetStudio'));
 
 const isAnyModalOpen = () => {
   try {
@@ -88,12 +90,18 @@ function AppContent() {
   const [editingWidget, setEditingWidget] = useState(null);
 
   const [viewport, setViewport] = useState(getViewportSize);
-  const isCompact = viewport.width < 1024;
 
   useEffect(() => {
-    const handleResize = () => setViewport(getViewportSize());
+    let frame;
+    const handleResize = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => setViewport(getViewportSize()));
+    };
     window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener('resize', handleResize);
+    };
   }, []);
 
   useEffect(() => {
@@ -104,14 +112,18 @@ function AppContent() {
   const [features, setFeatures] = useState(() => {
     const init = getStoredFeatures();
     applyLiteModeCss(init.liteMode);
+    applyAccessibilityCss(init);
     return init;
   });
+
+  const isCompact = viewport.width < 1024 || features.simpleLayout || features.largeText;
 
   useEffect(() => {
     const handleFeaturesUpdate = (e) => {
       const updated = e.detail || getStoredFeatures();
       setFeatures(updated);
       applyLiteModeCss(updated.liteMode);
+      applyAccessibilityCss(updated);
     };
     window.addEventListener("landing_features_updated", handleFeaturesUpdate);
     return () => window.removeEventListener("landing_features_updated", handleFeaturesUpdate);
@@ -273,9 +285,12 @@ function AppContent() {
 
   // Ensure the page always starts cleanly at the top (Screen 1 Dashboard) on load / refresh
   const [activeView, setActiveView] = useState('dashboard');
+  const [hasOpenedAI, setHasOpenedAI] = useState(false);
+  const aiDialogRef = useRef(null);
   const isTransitioningRef = useRef(false);
 
   const transitionTo = useCallback((view) => {
+    if (view === 'ai-studio') setHasOpenedAI(true);
     setActiveView((current) => {
       if (current === view) return current;
       isTransitioningRef.current = true;
@@ -286,6 +301,8 @@ function AppContent() {
     });
   }, []);
 
+  useDialogFocus(aiDialogRef, activeView === 'ai-studio', () => transitionTo('dashboard'));
+
   useEffect(() => {
     if ('scrollRestoration' in window.history) {
       window.history.scrollRestoration = 'manual';
@@ -293,17 +310,10 @@ function AppContent() {
     window.scrollTo(0, 0);
   }, []);
 
-  // Preload AI Studio in idle time so it's ready instantaneously on user action
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      import("./components/GlassAIStudio");
-    }, 600);
-    return () => clearTimeout(timer);
-  }, []);
-
   // Keyboard navigation: Escape returns to dashboard or exits standby mode; Z toggles standby mode; PageDown/PageUp toggles AI Studio
   useEffect(() => {
     const handleKeyDown = (e) => {
+      if (e.defaultPrevented || isAnyModalOpen()) return;
       const isInput =
         e.target instanceof HTMLInputElement ||
         e.target instanceof HTMLTextAreaElement ||
@@ -319,10 +329,10 @@ function AppContent() {
         if (e.altKey && (e.key === 'z' || e.key === 'Z') && activeView === 'dashboard') {
           e.preventDefault();
           toggleStandbyMode();
-        } else if (e.key === 'PageDown' && activeView === 'dashboard') {
+        } else if (e.altKey && e.key === 'PageDown' && activeView === 'dashboard' && features.aiStudio) {
           e.preventDefault();
           transitionTo('ai-studio');
-        } else if (e.key === 'PageUp' && activeView === 'ai-studio') {
+        } else if (e.altKey && e.key === 'PageUp' && activeView === 'ai-studio') {
           e.preventDefault();
           transitionTo('dashboard');
         }
@@ -330,21 +340,24 @@ function AppContent() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeView, transitionTo, features.standbyMode]);
+  }, [activeView, transitionTo, features.standbyMode, features.aiStudio]);
 
   return (
     <div
       id="root-viewport"
       className="h-screen w-screen relative overflow-hidden select-none bg-[#070a0f]"
     >
+      <a className="skip-link" href="#dashboard-screen">Skip to dashboard</a>
       {/* Background Wallpaper */}
       <div className="fixed inset-0 pointer-events-none z-0">
         <WallpaperManager />
       </div>
 
       {/* ================= FIXED DASHBOARD IN BACK ================= */}
-      <section
+      <main
         id="dashboard-screen"
+        aria-label="Dashboard"
+        tabIndex={-1}
         className="fixed inset-0 z-10 overflow-y-auto overflow-x-hidden"
         style={{
           transform: activeView === 'dashboard' ? 'scale(1)' : 'scale(0.97)',
@@ -354,11 +367,25 @@ function AppContent() {
           pointerEvents: activeView === 'dashboard' ? 'auto' : 'none',
         }}
       >
+        <div className={isCompact ? 'relative z-50 flex justify-end px-3 pt-3' : 'absolute top-4 right-5 z-50'}>
+          <Navbar
+            onResetLayout={handleResetLayout}
+            isDragEnabled={isDragEnabled}
+            onToggleDrag={handleToggleDrag}
+            onOpenWidgetStudio={() => { setEditingWidget(null); setIsStudioOpen(true); }}
+            onOpenAiStudio={() => transitionTo('ai-studio')}
+            customWidgets={customWidgets}
+            onEditWidget={(widget) => { setEditingWidget(widget); setIsStudioOpen(true); }}
+            onDeleteWidget={handleDeleteCustomWidget}
+            standbyMode={features.standbyMode}
+            onToggleStandby={toggleStandbyMode}
+          />
+        </div>
         {isCompact ? (
           /* ================= RESPONSIVE COMPACT FLOW LAYOUT ================= */
-          <div className="w-full max-w-4xl mx-auto flex flex-col items-center px-3 sm:px-6 pt-3 pb-24 gap-3 sm:gap-4 select-text">
+          <div className="simple-dashboard w-full max-w-4xl mx-auto flex flex-col items-center px-3 sm:px-6 pt-3 pb-24 gap-3 sm:gap-4 select-text">
             {/* Responsive Top Header: Weather + Clock on Left, Navbar Controls on Right */}
-            <div className="w-full flex items-center justify-between gap-2.5 min-h-[52px]">
+            <div className="w-full flex flex-wrap items-center justify-between gap-2.5 min-h-[52px]">
               <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
                 {features.weather && (
                   <div className="h-24 sm:h-28 w-44 sm:w-56 shrink-0">
@@ -372,26 +399,6 @@ function AppContent() {
                 )}
               </div>
 
-              <div className="shrink-0 self-start pt-1">
-                <Navbar
-                  onResetLayout={handleResetLayout}
-                  isDragEnabled={isDragEnabled}
-                  onToggleDrag={handleToggleDrag}
-                  onOpenWidgetStudio={() => {
-                    setEditingWidget(null);
-                    setIsStudioOpen(true);
-                  }}
-                  onOpenAiStudio={() => transitionTo('ai-studio')}
-                  customWidgets={customWidgets}
-                  onEditWidget={(w) => {
-                    setEditingWidget(w);
-                    setIsStudioOpen(true);
-                  }}
-                  onDeleteWidget={handleDeleteCustomWidget}
-                  standbyMode={features.standbyMode}
-                  onToggleStandby={toggleStandbyMode}
-                />
-              </div>
             </div>
 
             {/* 1. Search Bar */}
@@ -437,28 +444,6 @@ function AppContent() {
         ) : (
           /* ================= DESKTOP DRAGGABLE & RESIZABLE LAYOUT ================= */
           <>
-            {/* Top Header Navbar */}
-            <div className="absolute top-4 right-5 z-50">
-              <Navbar
-                onResetLayout={handleResetLayout}
-                isDragEnabled={isDragEnabled}
-                onToggleDrag={handleToggleDrag}
-                onOpenWidgetStudio={() => {
-                  setEditingWidget(null);
-                  setIsStudioOpen(true);
-                }}
-                onOpenAiStudio={() => transitionTo('ai-studio')}
-                customWidgets={customWidgets}
-                onEditWidget={(w) => {
-                  setEditingWidget(w);
-                  setIsStudioOpen(true);
-                }}
-                onDeleteWidget={handleDeleteCustomWidget}
-                standbyMode={features.standbyMode}
-                onToggleStandby={toggleStandbyMode}
-              />
-            </div>
-
             {/* 1. Draggable & Resizable Weather Widget */}
             {features.weather && (
               <DraggableWidget
@@ -609,7 +594,7 @@ function AppContent() {
       <WelcomePopup />
 
       {/* Custom Widget Studio Modal */}
-      <CustomWidgetStudio
+      {isStudioOpen && <Suspense fallback={<div role="status" className="loading-panel">Loading widget studio…</div>}><CustomWidgetStudio
         isOpen={isStudioOpen}
         onClose={() => {
           setIsStudioOpen(false);
@@ -617,13 +602,19 @@ function AppContent() {
         }}
         onSaveWidget={handleSaveCustomWidget}
         editingWidget={editingWidget}
-      />
+      /></Suspense>}
 
-    </section>
+    </main>
 
     {/* ================= SNAPPING CHAT SHEET OVERLAY ================= */}
     <div
       id="ai-studio-overlay"
+      ref={aiDialogRef}
+      role={activeView === 'ai-studio' ? 'dialog' : undefined}
+      aria-modal={activeView === 'ai-studio' ? 'true' : undefined}
+      aria-label="AI Studio"
+      aria-hidden={activeView !== 'ai-studio'}
+      tabIndex={-1}
       className={`fixed inset-0 z-50 flex items-center justify-center p-3 pb-16 sm:p-6 sm:pb-16 ${
         activeView === 'ai-studio' ? 'pointer-events-auto' : 'pointer-events-none'
       }`}
@@ -633,7 +624,6 @@ function AppContent() {
         pointerEvents: activeView === 'ai-studio' ? 'auto' : 'none',
         visibility: activeView === 'ai-studio' ? 'visible' : 'hidden',
         transition: 'transform 0.42s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease, visibility 0.42s',
-        willChange: 'transform, opacity',
       }}
     >
       {/* Dark backdrop overlay that dims the fixed dashboard */}
@@ -643,7 +633,7 @@ function AppContent() {
         title="Click backdrop to return to Dashboard"
       />
 
-      <Suspense
+      {hasOpenedAI && <Suspense
         fallback={
           <div className="w-full max-w-6xl h-[88vh] rounded-3xl bg-[#0c1017]/90 backdrop-blur-xl border border-white/15 flex flex-col items-center justify-center gap-3 shadow-2xl">
             <Sparkles className="animate-spin text-sky-400" size={28} />
@@ -655,7 +645,7 @@ function AppContent() {
           onScrollToDashboard={() => transitionTo('dashboard')}
           isActive={activeView === 'ai-studio'}
         />
-      </Suspense>
+      </Suspense>}
     </div>
 
     {/* ================= STANDBY / READING MODE INDICATOR & QUICK EXIT ================= */}

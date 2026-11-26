@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { updateWallpaper, subscribeToUserData } from '../services/databaseService';
 import { getCachedUserData, updateCachedWallpaper } from '../utils/cacheService';
@@ -9,8 +9,9 @@ import {
   detectMediaType,
   generateImageThumbnail,
 } from '../services/mediaService';
-import localWallpaper from '../assets/walpaper2.jpg';
+import localWallpaper from '../assets/wallpaper-default.webp';
 import { getStoredFeatures } from '../utils/featureToggleService';
+import useReducedMotion from '../hooks/useReducedMotion';
 
 const WALLPAPER_META_KEY = (uid) => `landing_wallpaper_meta_${uid}`;
 
@@ -41,6 +42,8 @@ export const readWallpaperMeta = (uid) => {
 };
 
 const WallpaperManager = () => {
+  const reducedMotion = useReducedMotion();
+  const videoRef = useRef(null);
   const defaultWallpaper = localWallpaper;
   const { currentUser } = useAuth();
   const effectiveUid = currentUser?.uid || 'local_guest';
@@ -59,6 +62,7 @@ const WallpaperManager = () => {
 
   const initialMeta = readWallpaperMeta(effectiveUid);
   const [features, setFeatures] = useState(() => getStoredFeatures());
+  const stillWallpaper = reducedMotion || features.liteMode || !features.videoWallpapers;
   useEffect(() => {
     const handleFeatures = (e) => {
       setFeatures(e.detail || getStoredFeatures());
@@ -355,9 +359,21 @@ const WallpaperManager = () => {
     };
   }, [effectiveUid, defaultWallpaper]);
 
+  useEffect(() => {
+    const update = () => {
+      if (!videoRef.current) return;
+      if (document.hidden) videoRef.current.pause();
+      else videoRef.current.play().catch(() => {});
+    };
+    update();
+    document.addEventListener('visibilitychange', update);
+    return () => document.removeEventListener('visibilitychange', update);
+  }, [stillWallpaper, mediaState.src]);
+
   return (
     <div
       className="wallpaper-container"
+      aria-hidden="true"
       style={{
         position: 'fixed',
         top: 0,
@@ -368,7 +384,6 @@ const WallpaperManager = () => {
         pointerEvents: 'none',
         backgroundColor: '#0b0d13',
         overflow: 'hidden',
-        willChange: 'transform',
       }}
     >
       {/* Progressive Blur-Up Replica Layer (< 3KB thumbnail replica rendered immediately on Frame 0) */}
@@ -395,11 +410,12 @@ const WallpaperManager = () => {
       )}
 
       {/* Full Resolution Heavy Media Layer with smooth crossfade (Video disabled in Lite Mode or when videoWallpapers is off) */}
-      {mediaState.src && mediaState.mediaType === 'video' && !(features.liteMode || !features.videoWallpapers) ? (
+      {mediaState.src && mediaState.mediaType === 'video' && !stillWallpaper ? (
         <video
+          ref={videoRef}
           key={mediaState.src}
           src={mediaState.src}
-          autoPlay
+          autoPlay={!document.hidden}
           loop
           muted
           playsInline
@@ -425,8 +441,9 @@ const WallpaperManager = () => {
         mediaState.src && (
           <img
             key={mediaState.src}
-            src={(mediaState.mediaType === 'video' && (features.liteMode || !features.videoWallpapers)) ? (thumbnailSrc || defaultWallpaper) : mediaState.src}
-            alt="Wallpaper"
+            src={(mediaState.mediaType === 'video' && stillWallpaper) ? (thumbnailSrc || defaultWallpaper) : mediaState.src}
+            alt=""
+            decoding="async"
             onLoad={handleFullImageLoaded}
             style={{
               position: 'absolute',

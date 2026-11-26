@@ -282,3 +282,60 @@ html.lite-mode .animate-bounce {
 html.lite-mode * {
   transition-duration: 0.15s !important;
 }
+
+/* Shared keyboard and reading preferences, including portal dialogs. */
+:focus-visible {
+  outline: 3px solid #7dd3fc !important;
+  outline-offset: 3px !important;
+  box-shadow: 0 0 0 5px #07111e !important;
+}
+button, [role="button"] { min-width: 24px; min-height: 24px; }
+input[type="checkbox"], input[type="radio"] { accent-color: #38bdf8; }
+label:has(input[type="file"]:focus-visible) { outline: 3px solid #7dd3fc; outline-offset: 3px; }
+.skip-link {
+  position: fixed; top: 8px; left: 8px; z-index: 100000;
+  padding: 12px 18px; background: #fff; color: #111;
+  border-radius: 8px; transform: translateY(-180%);
+}
+.skip-link:focus { transform: translateY(0); }
+.loading-panel {
+  position: fixed; top: 80px; right: 20px; z-index: 99999;
+  border: 1px solid #64748b; border-radius: 12px;
+  padding: 20px; background: #10151c; color: #fff;
+}
+.simple-dashboard > * { max-width: 100%; }
+html.large-text { font-size: 18px; }
+html.large-text [class*="text-[10px]"],
+html.large-text [class*="text-[11px]"],
+html.large-text [class*="text-[12px]"] { font-size: 0.8rem !important; }
+html.high-contrast {
+  --glass-search-text: #fff !important;
+  --glass-widgets-text: #fff !important;
+  --glass-favorites-text: #fff !important;
+  --glass-dials-text: #fff !important;
+}
+html.high-contrast .wallpaper-container { opacity: 0.12; }
+html.high-contrast :is(.dark-glass, .glass-morphism, .search-container, .speed-dial-item, .weather-widget, .clock, .popup, [role="dialog"] [class*="bg-"]) {
+  background: #10151c !important;
+  border-color: #94a3b8 !important;
+  backdrop-filter: none !important;
+}
+html.high-contrast :is([class*="text-gray"], [class*="text-white/"], input, textarea, select, button, a, label) {
+  color: #f8fafc !important; text-shadow: none !important;
+}
+html.high-contrast :is(input, textarea)::placeholder { color: #cbd5e1 !important; opacity: 1; }
+html.high-contrast [role="switch"][aria-checked="true"] { background: #0369a1 !important; }
+html.high-contrast button[aria-pressed="true"] { border: 2px solid #7dd3fc !important; }
+html.reduce-motion *, html.reduce-motion *::before, html.reduce-motion *::after {
+  animation: none !important; transition: none !important; scroll-behavior: auto !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
+@media (pointer: coarse) {
+  button, [role="button"] { min-width: 44px; min-height: 44px; }
+}
+@media (forced-colors: active) {
+  button, input, textarea, select, [role="dialog"] { border: 1px solid ButtonText !important; }
+  :focus-visible { outline: 3px solid Highlight !important; }
+}

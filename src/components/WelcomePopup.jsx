@@ -1,9 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { X } from 'lucide-react';
+import useDialogFocus from '../hooks/useDialogFocus';
 
 const WelcomePopup = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [currentFeature, setCurrentFeature] = useState(0);
+  const dialogRef = useRef(null);
+  useDialogFocus(dialogRef, isOpen, () => setIsOpen(false));
 
   useEffect(() => {
     // Show popup on first visit
@@ -39,7 +42,7 @@ const WelcomePopup = () => {
       description: 'Boost your productivity with these shortcuts!',
       icon: '⌨️',
       details: [
-        'Ctrl + Z - Undo your search query',
+        'Tab - Move between controls',
         'Ctrl + V - Paste last copied text in search box',
         'Shift + Backspace - Delete entire search query'
       ]
@@ -54,11 +57,11 @@ const WelcomePopup = () => {
   ];
 
   const nextFeature = () => {
+    if (currentFeature === features.length - 1) {
+      setIsOpen(false);
+      return;
+    }
     setCurrentFeature((prev) => (prev + 1) % features.length);
-  };
-
-  const prevFeature = () => {
-    setCurrentFeature((prev) => (prev - 1 + features.length) % features.length);
   };
 
   const goToFeature = (index) => {
@@ -74,10 +77,10 @@ const WelcomePopup = () => {
   const current = features[currentFeature];
 
   return (
-    <div className="popupOverlay">
+    <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Welcome to GlassTab" tabIndex={-1} className="popupOverlay">
       <div className="popup">
         <div className="closeBtn">
-          <button type="button" onClick={closePopup}>
+          <button type="button" aria-label="Close welcome" onClick={closePopup}>
             <X size={24} />
           </button>
         </div>
@@ -85,7 +88,7 @@ const WelcomePopup = () => {
         <h1>Welcome to Your Own Landing Page</h1>
         
         <div className="popupHeading">
-          Let's Know about our <span className="textHighlight">USP</span> features!
+          A few ways to make this dashboard yours.
         </div>
 
         <div className="features">
@@ -119,7 +122,10 @@ const WelcomePopup = () => {
 
         <div className="carouselIndicators">
           {features.map((_, index) => (
-            <li
+            <button
+              type="button"
+              aria-label={`Show tip ${index + 1}`}
+              aria-pressed={index === currentFeature}
               key={index}
               className={`indicator ${index === currentFeature ? 'indicatorHighlight' : ''}`}
               onClick={() => goToFeature(index)}

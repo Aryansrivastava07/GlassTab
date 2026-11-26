@@ -237,7 +237,6 @@ const SearchBar = ({ isDashboardActive = true }) => {
   const itemRefs = useRef([]);
   const suggestCacheRef = useRef(null);
   const reqSeqRef = useRef(0);
-  const lastFetchAtRef = useRef(0);
   const abortControllerRef = useRef(null);
 
   const { prefix, engine, badgeClass, term } = useMemo(
@@ -330,11 +329,7 @@ const SearchBar = ({ isDashboardActive = true }) => {
 
       // If already focused inside our search input:
       if (target === inputRef.current) {
-        if (e.ctrlKey && e.key.toLowerCase() === 'z') {
-          e.preventDefault();
-          setSearchQuery('');
-          setActiveIndex(-1);
-        } else if (e.shiftKey && e.key === 'Backspace') {
+        if (e.shiftKey && e.key === 'Backspace') {
           e.preventDefault();
           setSearchQuery('');
           setActiveIndex(-1);
@@ -344,6 +339,7 @@ const SearchBar = ({ isDashboardActive = true }) => {
 
       // If typing in another editable element or a modal is open, do not steal:
       if (isEditable) return;
+      if (e.defaultPrevented || !features.typeToSearch || target?.closest?.('button, a, [role="button"], [role="dialog"]')) return;
       if (isAnyModalOpen()) return;
 
       // Ignore modifier keys and browser navigation shortcuts:
@@ -405,7 +401,7 @@ const SearchBar = ({ isDashboardActive = true }) => {
 
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, [isDashboardActive]);
+  }, [isDashboardActive, features.typeToSearch]);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -422,7 +418,9 @@ const SearchBar = ({ isDashboardActive = true }) => {
 
   // Fast leading+debounced, persistently cached, prefix-filtered autocomplete fetcher
   useEffect(() => {
-    if (!features.searchSuggestions) {
+    const seq = ++reqSeqRef.current;
+    abortControllerRef.current?.abort();
+    if (!features.searchSuggestions || !isDashboardActive) {
       abortControllerRef.current?.abort();
       setRemoteSuggestions([]);
       return;
@@ -452,12 +450,9 @@ const SearchBar = ({ isDashboardActive = true }) => {
       setRemoteSuggestions(instant.items);
     }
 
-    const seq = ++reqSeqRef.current;
-    const elapsedSinceLastFetch = Date.now() - lastFetchAtRef.current;
-    const delayMs = elapsedSinceLastFetch >= 90 ? 0 : 35;
+    const delayMs = 180;
 
     const timer = setTimeout(async () => {
-      lastFetchAtRef.current = Date.now();
       abortControllerRef.current?.abort();
       const controller = new AbortController();
       abortControllerRef.current = controller;
@@ -482,8 +477,9 @@ const SearchBar = ({ isDashboardActive = true }) => {
 
     return () => {
       clearTimeout(timer);
+      abortControllerRef.current?.abort();
     };
-  }, [term, prefix, searchQuery]);
+  }, [term, prefix, searchQuery, features.searchSuggestions, isDashboardActive]);
 
   // Abort any in-flight suggestion request on unmount
   useEffect(() => {
@@ -596,6 +592,7 @@ const SearchBar = ({ isDashboardActive = true }) => {
   };
 
   const handleInputKeyDown = (e) => {
+    if (e.isComposing || e.nativeEvent?.isComposing) return;
     if (e.key === 'ArrowDown') {
       if (suggestions.length === 0) return;
       e.preventDefault();
@@ -606,13 +603,16 @@ const SearchBar = ({ isDashboardActive = true }) => {
       e.preventDefault();
       setIsDropdownOpen(true);
       setActiveIndex((prev) => (prev <= -1 ? suggestions.length - 1 : prev - 1));
-    } else if (e.key === 'Tab' && isDropdownOpen && activeIndex >= 0 && suggestions[activeIndex]) {
+    } else if (e.key === 'Delete' && e.shiftKey && isDropdownOpen && suggestions[activeIndex]?.type === 'history') {
       e.preventDefault();
-      setSearchQuery(suggestions[activeIndex].value);
+      handleRemoveHistoryItem(e, suggestions[activeIndex].value);
       setActiveIndex(-1);
+    } else if (e.key === 'Tab') {
+      setIsDropdownOpen(false);
     } else if (e.key === 'Escape') {
       if (isDropdownOpen) {
         e.preventDefault();
+        e.stopPropagation();
         setIsDropdownOpen(false);
         setActiveIndex(-1);
       } else {
@@ -644,7 +644,7 @@ const SearchBar = ({ isDashboardActive = true }) => {
     );
   };
 
-  const showDropdown = isFocused && isDropdownOpen && suggestions.length > 0 && dropdownRect;
+  const showDropdown = Boolean(isDashboardActive && isFocused && isDropdownOpen && suggestions.length > 0 && dropdownRect);
 
   // Flip upward if search bar is near the bottom of the screen
   const spaceBelow = dropdownRect ? dropdownRect.viewportHeight - dropdownRect.top - 16 : 360;
@@ -655,7 +655,7 @@ const SearchBar = ({ isDashboardActive = true }) => {
 
   return (
     <div ref={containerRef} className="w-full h-full flex items-center justify-center rounded-full">
-      <form onSubmit={handleFormSubmit} className="relative w-full h-full flex items-center rounded-full">
+      <form role="search" aria-label="Web search" onSubmit={handleFormSubmit} className="relative w-full h-full flex items-center rounded-full">
         <div
           onClick={() => inputRef.current?.focus({ preventScroll: true })}
           className="search-container rounded-full w-full h-full flex items-center relative"
@@ -681,6 +681,12 @@ const SearchBar = ({ isDashboardActive = true }) => {
           <input
             ref={inputRef}
             id="searchInput"
+            role="combobox"
+            aria-label="Search the web or enter a website address"
+            aria-autocomplete="list"
+            aria-expanded={showDropdown}
+            aria-controls={showDropdown ? 'web-search-suggestions' : undefined}
+            aria-activedescendant={showDropdown && suggestions[activeIndex] ? `web-search-option-${activeIndex}` : undefined}
             type="text"
             autoFocus={features.autoFocusSearch !== false}
             autoComplete="off"
@@ -746,6 +752,9 @@ const SearchBar = ({ isDashboardActive = true }) => {
         createPortal(
           <div
             data-search-dropdown="true"
+            id="web-search-suggestions"
+            role="listbox"
+            aria-label="Search suggestions"
             style={{
               position: 'fixed',
               left: `${dropdownRect.left}px`,
@@ -765,6 +774,10 @@ const SearchBar = ({ isDashboardActive = true }) => {
               return (
                 <div
                   key={`${item.type}_${item.value}`}
+                  id={`web-search-option-${idx}`}
+                  role="option"
+                  aria-selected={isSelected}
+                  aria-label={`${item.display}${item.type === 'history' ? ', recent search. Shift Delete to remove' : ''}`}
                   ref={(el) => {
                     itemRefs.current[idx] = el;
                   }}
@@ -803,6 +816,8 @@ const SearchBar = ({ isDashboardActive = true }) => {
                     {item.type === 'history' && (
                       <button
                         type="button"
+                        tabIndex={-1}
+                        aria-hidden="true"
                         onMouseDown={(e) => e.preventDefault()}
                         onClick={(e) => handleRemoveHistoryItem(e, item.value)}
                         className="p-1 text-gray-400 hover:text-red-300 rounded-md hover:bg-white/10 transition cursor-pointer"

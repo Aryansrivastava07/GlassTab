@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { Edit3, StickyNote } from 'lucide-react';
-import NotesModal from './NotesModal';
+const NotesModal = lazy(() => import('./NotesModal'));
 
 const NotesButton = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -15,7 +15,7 @@ const NotesButton = () => {
     <>
       <button
         onClick={() => setIsModalOpen(true)}
-        style={{ zIndex: 90 }}
+        style={{ zIndex: 40 }}
         className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 w-12 h-12 sm:w-14 sm:h-14 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-full shadow-2xl hover:shadow-blue-500/30 transition-all duration-200 flex items-center justify-center group cursor-pointer border border-white/20 hover:scale-105 pointer-events-auto"
         title="Quick Notes & Todos"
       >
@@ -28,7 +28,7 @@ const NotesButton = () => {
         </div>
       </button>
 
-      <NotesModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
+      {isModalOpen && <Suspense fallback={<div className="loading-panel" role="status">Loading notes…</div>}><NotesModal isOpen onClose={() => setIsModalOpen(false)} /></Suspense>}
     </>
   );
 };

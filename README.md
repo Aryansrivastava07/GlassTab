@@ -1,7 +1,7 @@
 # 🪟 GlassTab — Futuristic Glassmorphic AI New Tab Dashboard
 
 <p align="center">
-  <a href="https://github.com/Aryansrivastava07/GlassTab/raw/main/glasstab-extension.zip">
+  <a href="https://aryansrivastava07.github.io/GlassTab/glasstab-extension.zip">
     <img src="https://img.shields.io/badge/⚡_Direct_Download-Extension_(.ZIP)-2ea44f?style=for-the-badge&logo=googlechrome&logoColor=white" alt="Direct Download Extension" />
   </a>
 </p>
@@ -39,9 +39,15 @@
 
 ## ⚡ 3-Step Instant Install (No Coding Required)
 
+### Updating an unpacked installation
+
+After GitHub Pages is enabled for this repository (Settings → Pages → Source: GitHub Actions), each push to `main` builds and publishes the latest extension files. Open the [GlassTab updater](https://aryansrivastava07.github.io/GlassTab/update/) in Chrome or Edge, select the **exact folder** shown for GlassTab under `chrome://extensions` → Details, and then click Reload on the extension card. The updater checks the downloaded files before writing and leaves browser-stored notes and settings alone. New builds also show an Update button in the extension. Existing installations need one manual visit to the updater to get that button.
+
+The website cannot discover or modify the installed folder without the user's folder selection and write permission. If GitHub Pages has not been enabled, the updater URL will not be available yet.
+
 Want to start using GlassTab right away? No Node.js, Git, or build tools are required:
 
-1. **[📥 Download Extension (.ZIP)](https://github.com/Aryansrivastava07/GlassTab/raw/main/glasstab-extension.zip)** *(~4.1 MB)*
+1. **[📥 Download Extension (.ZIP)](https://aryansrivastava07.github.io/GlassTab/glasstab-extension.zip)**
 2. **Extract** the downloaded `.zip` file to any folder on your computer.
 3. Open Chrome or Edge and go to `chrome://extensions` (or `edge://extensions`):
    - Turn **ON** **Developer mode** (top-right toggle).

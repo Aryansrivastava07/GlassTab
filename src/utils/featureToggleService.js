@@ -10,6 +10,11 @@ export const DEFAULT_FEATURES = {
   // Individual feature toggles
   search: true,
   autoFocusSearch: true,
+  typeToSearch: true,
+  highContrast: false,
+  largeText: false,
+  simpleLayout: false,
+  reducedMotion: false,
   clock: true,
   weather: true,
   speedDials: true,
@@ -42,6 +47,13 @@ export const applyLiteModeCss = (isLite) => {
   }
 };
 
+export const applyAccessibilityCss = (features) => {
+  if (typeof document === 'undefined') return;
+  for (const [key, className] of Object.entries({ highContrast: 'high-contrast', largeText: 'large-text', reducedMotion: 'reduce-motion' })) {
+    document.documentElement.classList.toggle(className, Boolean(features[key]));
+  }
+};
+
 /**
  * Retrieve current feature configuration from localStorage
  */
@@ -70,6 +82,7 @@ export const saveStoredFeatures = (newFeatures) => {
     };
     localStorage.setItem(FEATURES_STORAGE_KEY, JSON.stringify(merged));
     applyLiteModeCss(Boolean(merged.liteMode));
+    applyAccessibilityCss(merged);
     window.dispatchEvent(new CustomEvent('landing_features_updated', { detail: merged }));
     return merged;
   } catch (err) {

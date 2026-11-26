@@ -21,6 +21,8 @@ export const UrlSuggestions = ({ suggestions = [], onSelect, currentUrl = '' }) 
             <button
               key={item.url}
               type="button"
+              aria-pressed={isSelected}
+              aria-label={`Use ${item.url}`}
               onClick={() => onSelect(item.url)}
               className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] transition-all cursor-pointer font-mono ${
                 isSelected

@@ -36,6 +36,7 @@ import { getUrlSuggestionsForName } from '../utils/urlSuggestionService';
 import UrlSuggestions from './UrlSuggestions';
 import GlassThemeControls from './GlassThemeControls';
 import AccessibilitySettings from './AccessibilitySettings';
+import ClockSettings from './ClockSettings';
 
 const formatSyncTimestamp = (iso) => {
   if (!iso) return 'Never';
@@ -72,7 +73,7 @@ const PRESET_WALLPAPERS = [
 const FEATURE_ITEMS = [
   { key: 'search', name: 'Search Bar', desc: 'Search with engine shortcuts (g, b, y)', perfBadge: 'Optional', icon: Search },
   { key: 'autoFocusSearch', name: 'Auto-focus Search on New Tab', desc: 'Focus search bar instead of address bar on Ctrl+T', perfBadge: 'Instant Type', icon: Focus },
-  { key: 'clock', name: 'Analog Clock', desc: 'Current time, with a quieter reduced-motion mode', perfBadge: 'Stops timer', icon: Clock },
+  { key: 'clock', name: 'Clock', desc: 'Analog or digital time in your selected time zone', perfBadge: 'Stops timer', icon: Clock },
   { key: 'weather', name: 'Weather Widget', desc: 'Current conditions and 5-day forecast', perfBadge: 'Stops API Polling', icon: Cloud },
   { key: 'speedDials', name: 'Speed Dials Dock', desc: 'Visual shortcut icons dock on the dashboard', perfBadge: 'Reduces DOM', icon: Grid },
   { key: 'favorites', name: 'Favorites Bar', desc: 'Bookmark categories and quick links bar', perfBadge: 'Reduces DOM', icon: Heart },
@@ -745,6 +746,7 @@ const Sidebar = ({
           {/* TAB 2: WIDGETS & LAYOUT */}
           {normalizedTab === 'settings' && (
             <div className="space-y-5">
+              <ClockSettings />
               {/* Drag & Resize Toggle */}
               <div className="p-4 bg-white/5 border border-white/10 rounded-xl space-y-4">
                 <div className="flex items-start justify-between gap-3">

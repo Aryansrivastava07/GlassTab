@@ -637,9 +637,9 @@ const SearchBar = ({ isDashboardActive = true }) => {
     if (idx === -1) return text;
     return (
       <>
-        <span className="text-gray-300">{text.slice(0, idx)}</span>
-        <span className="text-white font-semibold">{text.slice(idx, idx + q.length)}</span>
-        <span className="text-gray-300">{text.slice(idx + q.length)}</span>
+        <span className="opacity-80">{text.slice(0, idx)}</span>
+        <span className="font-semibold">{text.slice(idx, idx + q.length)}</span>
+        <span className="opacity-80">{text.slice(idx + q.length)}</span>
       </>
     );
   };
@@ -657,8 +657,12 @@ const SearchBar = ({ isDashboardActive = true }) => {
     <div ref={containerRef} className="w-full h-full flex items-center justify-center rounded-full">
       <form role="search" aria-label="Web search" onSubmit={handleFormSubmit} className="relative w-full h-full flex items-center rounded-full">
         <div
-          onClick={() => inputRef.current?.focus({ preventScroll: true })}
-          className="search-container rounded-full w-full h-full flex items-center relative"
+          onClick={(event) => {
+            if (event.target.closest('button')) return;
+            inputRef.current?.focus({ preventScroll: true });
+            setIsDropdownOpen(true);
+          }}
+          className="search-container compound-field rounded-full w-full h-full flex items-center relative"
           style={{
             ...getGlassStyleForPart(glassTheme.search),
             ...getTextStyleForPart(glassTheme.search),
@@ -694,7 +698,6 @@ const SearchBar = ({ isDashboardActive = true }) => {
             value={searchQuery}
             onFocus={() => {
               setIsFocused(true);
-              setIsDropdownOpen(true);
               updateDropdownRect();
             }}
             onBlur={() => {
@@ -710,10 +713,10 @@ const SearchBar = ({ isDashboardActive = true }) => {
             onKeyDown={handleInputKeyDown}
             placeholder="Search the web or type g / b / y ..."
             style={{
-              color: glassTheme.search.textColor || '#ffffff',
+              color: getTextStyleForPart(glassTheme.search).color,
               textShadow: getTextStyleForPart(glassTheme.search).textShadow,
             }}
-            className={`w-full h-full ${engine ? 'pl-2.5' : 'pl-3'} pr-28 text-base sm:text-lg bg-transparent border-none rounded-full focus:outline-none placeholder-gray-400`}
+            className={`min-w-0 flex-1 h-full ${engine ? 'pl-2.5' : 'pl-3'} pr-2 text-base sm:text-lg bg-transparent border-none rounded-full focus:outline-none placeholder-gray-400`}
           />
 
           {searchQuery && (
@@ -726,7 +729,7 @@ const SearchBar = ({ isDashboardActive = true }) => {
                 inputRef.current?.focus();
               }}
               style={{ color: getMutedTextStyleForPart(glassTheme.search, 70).color }}
-              className="mr-24 p-1.5 hover:text-white rounded-full hover:bg-white/10 transition cursor-pointer"
+              className="shrink-0 p-1.5 hover:text-white rounded-full hover:bg-white/10 transition cursor-pointer"
               title="Clear search"
             >
               <X size={15} />
@@ -736,11 +739,11 @@ const SearchBar = ({ isDashboardActive = true }) => {
           <button
             type="submit"
             style={{
-              color: glassTheme.search.textColor || '#ffffff',
+              color: getTextStyleForPart(glassTheme.search).color,
               textShadow: getTextStyleForPart(glassTheme.search).textShadow,
               borderColor: getMutedTextStyleForPart(glassTheme.search, 25).color,
             }}
-            className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-white/10 px-5 py-2 rounded-full hover:bg-white/20 transition-all duration-200 border text-sm font-medium cursor-pointer"
+            className="mx-2 shrink-0 bg-white/10 px-3 sm:px-5 py-2 rounded-full hover:bg-white/20 transition-all duration-200 border text-sm font-medium cursor-pointer"
           >
             Search
           </button>
@@ -764,7 +767,7 @@ const SearchBar = ({ isDashboardActive = true }) => {
                 : { top: `${dropdownRect.top}px` }),
               maxHeight: `${maxDropdownHeight}px`,
               zIndex: 9990,
-              ...getGlassStyleForPart(glassTheme.search),
+              backgroundColor: glassTheme.search.color,
               ...getTextStyleForPart(glassTheme.search),
             }}
             className="dark-glass rounded-2xl border border-white/15 shadow-2xl overflow-y-auto py-1.5"
@@ -794,7 +797,7 @@ const SearchBar = ({ isDashboardActive = true }) => {
                   }}
                   onMouseEnter={() => setActiveIndex(idx)}
                   className={`flex items-center justify-between gap-3 px-4 py-2.5 text-sm cursor-pointer transition-colors ${
-                    isSelected ? 'bg-white/15 text-white' : 'text-gray-200 hover:bg-white/10'
+                    isSelected ? 'bg-current/15' : 'hover:bg-current/10'
                   }`}
                 >
                   <div className="flex items-center gap-3 min-w-0 flex-1">

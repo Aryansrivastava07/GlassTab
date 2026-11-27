@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import useDialogFocus from '../hooks/useDialogFocus';
 import {
   Sparkles,
@@ -18,7 +18,6 @@ import {
   Wand2,
   Mic,
   MicOff,
-  Volume2,
   Edit2,
   ShieldCheck,
   Globe,
@@ -48,8 +47,11 @@ import {
 import { getGeminiApiKey, saveGeminiApiKey, maskApiKey, subscribeToCloudGeminiKey } from '../services/aiWidgetService';
 import { useAuth } from '../context/AuthContext';
 import { signInWithGoogle, signInWithEmail, registerWithEmail } from '../services/authService';
-import { AI_VOICES, transcribeVoiceRecording, getVoiceScript, generateVoicePhrase } from '../services/aiVoiceService';
-import { getAudioRecoveryDelay, isUsableVoiceBuffer, voiceAudioMatchesScript } from '../utils/voiceSpeech';
+import { startGeminiLive, LIVE_MODEL } from '../services/geminiLive';
+import { getFunctions, httpsCallable } from 'firebase/functions';
+import { app } from '../firebase';
+
+const voiceKeyStorage = 'glasstab_gemini_live_key';
 
 // Lightweight Zero-Dependency Markdown Formatter with Copyable Code Blocks
 const FormattedMessage = ({ text }) => {
@@ -311,80 +313,15 @@ export const GlassAIStudio = ({ onScrollToDashboard, isActive = true }) => {
   const [newCharTagline, setNewCharTagline] = useState('');
   const [newCharPrompt, setNewCharPrompt] = useState('');
 
-  // Voice conversation state. Recording stops while the AI generates and plays audio.
-  const [isVoiceMode, setIsVoiceMode] = useState(false);
-  const [isListening, setIsListening] = useState(false);
-  const [isSpeaking, setIsSpeaking] = useState(false);
-  const [isPreparingVoice, setIsPreparingVoice] = useState(false);
-  const [isRestoringAudio, setIsRestoringAudio] = useState(false);
-  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [voiceStage, setVoiceStage] = useState('');
   const [voiceError, setVoiceError] = useState('');
-  const [showVoiceSetup, setShowVoiceSetup] = useState(false);
-  const [voiceApiKeyInput, setVoiceApiKeyInput] = useState('');
-  const [hasVoiceKey, setHasVoiceKey] = useState(() => Boolean(getProviderApiKey('groqcloud').trim()));
-  const [preferredVoiceName, setPreferredVoiceName] = useState(() => {
-    try {
-      const saved = window.localStorage.getItem('landing_ai_generated_voice');
-      return AI_VOICES.some((voice) => voice.id === saved) ? saved : 'autumn';
-    }
-    catch { return 'autumn'; }
-  });
-  const [microphones, setMicrophones] = useState([]);
-  const [selectedMicId, setSelectedMicId] = useState(() => {
-    try { return window.localStorage.getItem('landing_ai_microphone') || ''; }
-    catch { return ''; }
-  });
-  const voiceModeRef = useRef(false);
+  const [showVoiceKey, setShowVoiceKey] = useState(false);
+  const [voiceKeyInput, setVoiceKeyInput] = useState('');
+  const voiceDialogRef = useRef(null);
+  useDialogFocus(voiceDialogRef, isActive && showVoiceKey, () => setShowVoiceKey(false));
+  const voiceModeRef = useRef(null);
+  const isVoiceMode = Boolean(voiceStage);
   const isGeneratingRef = useRef(false);
-  const recorderRef = useRef(null);
-  const streamRef = useRef(null);
-  const audioContextRef = useRef(null);
-  const playbackContextRef = useRef(null);
-  const micClosePromiseRef = useRef(Promise.resolve());
-  const micReleasedAtRef = useRef(0);
-  const refreshMicrophonesRef = useRef(null);
-  const listenTimerRef = useRef(null);
-  const audioRef = useRef(null);
-  const audioDoneRef = useRef(null);
-  const voiceRequestRef = useRef(null);
-  const voiceSessionRef = useRef(0);
-  const sessionVoiceRef = useRef('autumn');
-  const sessionMicRef = useRef('');
-  const restartTimerRef = useRef(null);
-  const sendMessageRef = useRef(null);
-  const stopVoiceRef = useRef(null);
-
-  useEffect(() => {
-    const refreshVoiceKey = (event) => {
-      if (!event || event.detail?.provider === 'groqcloud') {
-        setHasVoiceKey(Boolean(getProviderApiKey('groqcloud').trim()));
-      }
-    };
-    window.addEventListener('landing_ai_provider_key_changed', refreshVoiceKey);
-    return () => window.removeEventListener('landing_ai_provider_key_changed', refreshVoiceKey);
-  }, []);
-
-  useEffect(() => {
-    const media = navigator.mediaDevices;
-    if (!media?.enumerateDevices) return undefined;
-    let mounted = true;
-    const refresh = async () => {
-      try {
-        const devices = await media.enumerateDevices();
-        if (mounted) setMicrophones(devices.filter((device) =>
-          device.kind === 'audioinput' && device.deviceId && !['default', 'communications'].includes(device.deviceId)
-        ));
-      } catch { /* The system default microphone remains available. */ }
-    };
-    refreshMicrophonesRef.current = refresh;
-    refresh();
-    media.addEventListener?.('devicechange', refresh);
-    return () => {
-      mounted = false;
-      media.removeEventListener?.('devicechange', refresh);
-      refreshMicrophonesRef.current = null;
-    };
-  }, []);
 
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
@@ -448,6 +385,7 @@ export const GlassAIStudio = ({ onScrollToDashboard, isActive = true }) => {
 
   const handleDeleteThread = (threadId, e) => {
     e.stopPropagation();
+    if (activeThreadId === threadId && voiceModeRef.current) stopVoiceConversation();
     const updated = deleteChatThread(threadId);
     setThreads(updated);
     if (activeThreadId === threadId) {
@@ -456,6 +394,7 @@ export const GlassAIStudio = ({ onScrollToDashboard, isActive = true }) => {
   };
 
   const handleSwitchCharacter = (charId) => {
+    if (voiceModeRef.current) stopVoiceConversation();
     setActiveCharacterId(charId);
     setShowCharacterMenu(false);
 
@@ -518,242 +457,25 @@ export const GlassAIStudio = ({ onScrollToDashboard, isActive = true }) => {
     }, 1200);
   };
 
-  function releaseMicrophone() {
-    clearInterval(listenTimerRef.current);
-    listenTimerRef.current = null;
-    const stream = streamRef.current;
-    const context = audioContextRef.current;
-    stream?.getTracks().forEach((track) => track.stop());
-    streamRef.current = null;
-    audioContextRef.current = null;
-    if (stream || context) {
-      micClosePromiseRef.current = (context && context.state !== 'closed'
-        ? context.close().catch(() => {})
-        : Promise.resolve()).then(() => { micReleasedAtRef.current = performance.now(); });
-    }
-    return micClosePromiseRef.current;
+  function stopVoiceConversation(message = '') {
+    voiceModeRef.current?.abort();
+    voiceModeRef.current = null;
+    setVoiceStage('');
+    setVoiceError(message);
   }
 
-  function cancelRecording() {
-    const recorder = recorderRef.current;
-    recorderRef.current = null;
-    if (recorder) {
-      recorder.ondataavailable = null;
-      recorder.onstop = null;
-      if (recorder.state !== 'inactive') recorder.stop();
-    }
-    releaseMicrophone();
+  function openVoiceKey() {
+    setShowCharacterMenu(false);
+    setVoiceKeyInput('');
+    setShowVoiceKey(true);
   }
 
-  function stopVoiceConversation(message = '', updateUi = true) {
-    voiceModeRef.current = false;
-    voiceSessionRef.current += 1;
-    clearTimeout(restartTimerRef.current);
-    restartTimerRef.current = null;
-    cancelRecording();
-    voiceRequestRef.current?.abort();
-    voiceRequestRef.current = null;
-    audioRef.current?.pause();
-    audioDoneRef.current?.();
-    audioDoneRef.current = null;
-    playbackContextRef.current?.close().catch(() => {});
-    playbackContextRef.current = null;
-    if (updateUi) {
-      setIsVoiceMode(false);
-      setIsListening(false);
-      setIsSpeaking(false);
-      setIsPreparingVoice(false);
-      setIsRestoringAudio(false);
-      setIsTranscribing(false);
-      setVoiceError(message);
-    }
-  }
-  stopVoiceRef.current = stopVoiceConversation;
+  useEffect(() => {
+    if (!isActive) stopVoiceConversation();
+    return () => { voiceModeRef.current?.abort(); voiceModeRef.current = null; };
+  }, [isActive, effectiveUid]);
 
-  async function startVoiceListening() {
-    if (!voiceModeRef.current || recorderRef.current || isGeneratingRef.current || audioRef.current) return;
-    const session = voiceSessionRef.current;
-    let stream;
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-        ...(sessionMicRef.current ? { deviceId: { exact: sessionMicRef.current } } : {}),
-      } });
-      if (!voiceModeRef.current || session !== voiceSessionRef.current) {
-        stream.getTracks().forEach((track) => track.stop());
-        return;
-      }
-      streamRef.current = stream;
-      refreshMicrophonesRef.current?.();
-      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-      const context = new AudioContextClass();
-      audioContextRef.current = context;
-      const source = context.createMediaStreamSource(stream);
-      const analyser = context.createAnalyser();
-      analyser.fftSize = 2048;
-      source.connect(analyser);
-      if (context.state === 'suspended') context.resume().catch(() => {});
-      const samples = new Float32Array(analyser.fftSize);
-      const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4']
-        .find((type) => MediaRecorder.isTypeSupported(type));
-      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
-      recorderRef.current = recorder;
-      const chunks = [];
-      let speechDetected = false;
-      let loudFrames = 0;
-      let noiseFloor = 0.004;
-      let lastSpeechAt = 0;
-      const startedAt = performance.now();
-      recorder.ondataavailable = (event) => { if (event.data.size) chunks.push(event.data); };
-      recorder.onstop = async () => {
-        if (recorderRef.current !== recorder) return;
-        recorderRef.current = null;
-        await releaseMicrophone();
-        setIsListening(false);
-        if (!voiceModeRef.current || session !== voiceSessionRef.current) return;
-        if (!speechDetected || !chunks.length) {
-          restartTimerRef.current = setTimeout(startVoiceListening, 250);
-          return;
-        }
-        setIsTranscribing(true);
-        const controller = new AbortController();
-        voiceRequestRef.current = controller;
-        try {
-          const blob = new Blob(chunks, { type: recorder.mimeType || 'audio/webm' });
-          const transcript = await transcribeVoiceRecording(blob, controller.signal);
-          if (!voiceModeRef.current || session !== voiceSessionRef.current) return;
-          setIsTranscribing(false);
-          if (transcript) {
-            setInputMessage(transcript);
-            sendMessageRef.current?.(transcript);
-          } else {
-            restartTimerRef.current = setTimeout(startVoiceListening, 350);
-          }
-        } catch (error) {
-          if (session === voiceSessionRef.current) stopVoiceConversation(error.message || 'Could not transcribe your voice.');
-        } finally {
-          if (voiceRequestRef.current === controller) voiceRequestRef.current = null;
-        }
-      };
-      recorder.start(250);
-      setIsListening(true);
-      listenTimerRef.current = setInterval(() => {
-        if (recorder.state !== 'recording') return;
-        analyser.getFloatTimeDomainData(samples);
-        let power = 0;
-        for (const sample of samples) power += sample * sample;
-        const volume = Math.sqrt(power / samples.length);
-        const now = performance.now();
-        const loud = volume > Math.max(0.016, noiseFloor * 2.2);
-        if (!speechDetected) noiseFloor = Math.min(0.03, noiseFloor * 0.96 + volume * 0.04);
-        loudFrames = loud ? loudFrames + 1 : 0;
-        if (loudFrames >= 3) {
-          speechDetected = true;
-          lastSpeechAt = now;
-        }
-        if ((speechDetected && now - lastSpeechAt > 1100 && now - startedAt > 700) ||
-            now - startedAt > 25000 || (!speechDetected && now - startedAt > 12000)) {
-          recorder.stop();
-        }
-      }, 100);
-    } catch (error) {
-      cancelRecording();
-      if (session !== voiceSessionRef.current) return;
-      stopVoiceConversation(error.name === 'NotAllowedError'
-        ? 'Microphone access was denied. Allow it to use AI voice chat.'
-        : error.name === 'OverconstrainedError' || error.name === 'NotFoundError'
-          ? 'The selected microphone is unavailable. Choose another one in Voice setup.'
-          : `Could not start AI voice: ${error.message}`);
-    }
-  }
-
-  async function speakVoiceReply(text) {
-    if (!voiceModeRef.current) return;
-    const session = voiceSessionRef.current;
-    setIsPreparingVoice(true);
-    const controller = new AbortController();
-    voiceRequestRef.current = controller;
-    let playbackContext = null;
-    let played = false;
-    try {
-      const script = await getVoiceScript(text, controller.signal);
-      if (!voiceModeRef.current || session !== voiceSessionRef.current) return;
-      if (!script) {
-        setIsPreparingVoice(false);
-        restartTimerRef.current = setTimeout(startVoiceListening, 350);
-        return;
-      }
-      let blob = await generateVoicePhrase(script, sessionVoiceRef.current, controller.signal);
-      if (!voiceModeRef.current || session !== voiceSessionRef.current) return;
-
-      setIsRestoringAudio(true);
-      await micClosePromiseRef.current;
-      if (!voiceModeRef.current || session !== voiceSessionRef.current) return;
-      const recoveryRemaining = getAudioRecoveryDelay(micReleasedAtRef.current, performance.now());
-      if (recoveryRemaining) await new Promise((resolve) => setTimeout(resolve, recoveryRemaining));
-      if (!voiceModeRef.current || session !== voiceSessionRef.current) return;
-      setIsRestoringAudio(false);
-
-      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-      playbackContext = new AudioContextClass();
-      playbackContextRef.current = playbackContext;
-      let buffer = null;
-      for (let attempt = 0; attempt < 2; attempt += 1) {
-        try { buffer = await playbackContext.decodeAudioData(await blob.arrayBuffer()); }
-        catch { buffer = null; }
-        if (!voiceModeRef.current || session !== voiceSessionRef.current) return;
-        if (isUsableVoiceBuffer(buffer, script)) {
-          const verifiedText = await transcribeVoiceRecording(blob, controller.signal, 'en');
-          if (!voiceModeRef.current || session !== voiceSessionRef.current) return;
-          if (voiceAudioMatchesScript(script, verifiedText)) break;
-        }
-        if (attempt === 1) throw new Error('AI voice returned incomplete audio twice. Try another voice in Voice setup.');
-        blob = await generateVoicePhrase(script, sessionVoiceRef.current, controller.signal);
-      }
-      if (voiceRequestRef.current === controller) voiceRequestRef.current = null;
-      if (!voiceModeRef.current || session !== voiceSessionRef.current) return;
-      await playbackContext.resume();
-      if (!voiceModeRef.current || session !== voiceSessionRef.current) return;
-
-      setIsRestoringAudio(false);
-      setIsPreparingVoice(false);
-      setIsSpeaking(true);
-      await new Promise((resolve, reject) => {
-        const source = playbackContext.createBufferSource();
-        source.buffer = buffer;
-        source.connect(playbackContext.destination);
-        let settled = false;
-        const finish = (error) => {
-          if (settled) return;
-          settled = true;
-          source.onended = null;
-          audioRef.current = null;
-          audioDoneRef.current = null;
-          if (error) reject(error);
-          else resolve();
-        };
-        audioRef.current = { pause: () => { try { source.stop(); } catch { /* Already stopped. */ } finish(); } };
-        audioDoneRef.current = () => finish();
-        source.onended = () => finish();
-        try { source.start(); }
-        catch (error) { finish(error); }
-      });
-      played = true;
-    } catch (error) {
-      if (session === voiceSessionRef.current) stopVoiceConversation(error.message || 'AI voice generation failed.');
-    } finally {
-      if (voiceRequestRef.current === controller) voiceRequestRef.current = null;
-      if (playbackContextRef.current === playbackContext) playbackContextRef.current = null;
-      await playbackContext?.close().catch(() => {});
-    }
-    if (played && voiceModeRef.current && session === voiceSessionRef.current) {
-      setIsSpeaking(false);
-      setIsPreparingVoice(false);
-      restartTimerRef.current = setTimeout(startVoiceListening, 350);
-    }
-  }
+  useEffect(() => { setVoiceStage(''); }, [effectiveUid]);
 
   const handleSendMessage = async (customPrompt = null) => {
     if (!hasKey) {
@@ -764,26 +486,8 @@ export const GlassAIStudio = ({ onScrollToDashboard, isActive = true }) => {
     const textToSend = (customPrompt || inputMessage).trim();
     if (!textToSend || isGeneratingRef.current) return;
 
-    const wasVoiceTurn = voiceModeRef.current;
-    if (wasVoiceTurn) {
-      voiceSessionRef.current += 1;
-      clearTimeout(restartTimerRef.current);
-      restartTimerRef.current = null;
-      cancelRecording();
-      voiceRequestRef.current?.abort();
-      voiceRequestRef.current = null;
-      audioRef.current?.pause();
-      audioDoneRef.current?.();
-      playbackContextRef.current?.close().catch(() => {});
-      playbackContextRef.current = null;
-      setIsListening(false);
-      setIsSpeaking(false);
-      setIsPreparingVoice(false);
-      setIsRestoringAudio(false);
-      setIsTranscribing(false);
-    }
-
-    if (!customPrompt || wasVoiceTurn) setInputMessage('');
+    if (voiceModeRef.current) stopVoiceConversation();
+    if (!customPrompt) setInputMessage('');
 
     // Append user message immediately
     const userMsg = {
@@ -830,7 +534,6 @@ export const GlassAIStudio = ({ onScrollToDashboard, isActive = true }) => {
         userMessage: textToSend,
         history: updatedMessages.slice(0, -1),
         useWebSearch,
-        voiceMode: wasVoiceTurn,
       });
 
       const aiMsg = {
@@ -855,7 +558,6 @@ export const GlassAIStudio = ({ onScrollToDashboard, isActive = true }) => {
 
       setThreads(finalThreads);
       saveChatThreads(finalThreads);
-      speakVoiceReply(reply.text);
     } catch (err) {
       if (voiceModeRef.current) stopVoiceConversation('The AI request failed. Read the error in chat and tap the microphone to try again.');
       if (err.message === 'MISSING_API_KEY') {
@@ -884,75 +586,51 @@ export const GlassAIStudio = ({ onScrollToDashboard, isActive = true }) => {
     }
   };
 
-  sendMessageRef.current = handleSendMessage;
-
-  const toggleVoiceConversation = () => {
-    if (voiceModeRef.current) {
-      stopVoiceConversation();
+  const toggleVoiceConversation = async () => {
+    if (voiceModeRef.current) return stopVoiceConversation();
+    if (isGeneratingRef.current || !activeThread) return;
+    const key = localStorage.getItem(voiceKeyStorage) || getGeminiApiKey();
+    if (!key && !isSignedIn) {
+      setVoiceError('Sign in to use GlassTab voice, or add your own Gemini key.');
+      openVoiceKey();
       return;
     }
-    if (!hasKey) {
-      setShowApiKeyModal(true);
-      return;
-    }
-    if (!getProviderApiKey('groqcloud').trim()) {
-      setShowVoiceSetup(true);
-      setVoiceError('Add your GroqCloud API key to start AI voice chat.');
-      return;
-    }
-    if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder ||
-        !(window.AudioContext || window.webkitAudioContext)) {
-      setVoiceError('AI voice chat needs microphone recording support. Try a current version of Chrome or Edge.');
-      return;
-    }
+    const controller = new AbortController();
+    voiceModeRef.current = controller;
     setVoiceError('');
-    setShowVoiceSetup(false);
-    voiceModeRef.current = true;
-    sessionVoiceRef.current = preferredVoiceName;
-    sessionMicRef.current = selectedMicId;
-    setIsVoiceMode(true);
-    startVoiceListening();
-  };
-
-  useEffect(() => {
-    if (!isActive && voiceModeRef.current) stopVoiceRef.current?.();
-  }, [isActive]);
-
-  useEffect(() => () => stopVoiceRef.current?.('', false), []);
-
-  const voiceStage = isListening ? 'listening' : isTranscribing || isGenerating ? 'thinking' : isRestoringAudio ? 'restoring' : isSpeaking ? 'speaking' : isPreparingVoice ? 'preparing' : 'connecting';
-  const voiceStageCopy = {
-    listening: ['Listening', 'I’ll respond when you finish speaking.'],
-    thinking: [isTranscribing ? 'Understanding' : 'Thinking', isTranscribing ? 'Transcribing your voice…' : 'Putting a reply together…'],
-    speaking: ['Speaking', `${activeCharacter.name} is replying with AI voice`],
-    preparing: ['Preparing voice', 'Generating and checking speech…'],
-    restoring: ['Restoring audio', 'Waiting for your headphones to return to full quality…'],
-    connecting: ['Getting ready', 'Starting the microphone…'],
-  };
-
-  const handleVoiceSelection = (event) => {
-    const name = event.target.value;
-    setPreferredVoiceName(name);
-    try { window.localStorage.setItem('landing_ai_generated_voice', name); }
-    catch { /* The current session can still use the chosen voice. */ }
-  };
-
-  const handleMicrophoneSelection = (event) => {
-    const deviceId = event.target.value;
-    setSelectedMicId(deviceId);
-    try { window.localStorage.setItem('landing_ai_microphone', deviceId); }
-    catch { /* This call can still use the selected microphone. */ }
-  };
-
-  const handleSaveVoiceKey = (event) => {
-    event.preventDefault();
-    const key = voiceApiKeyInput.trim();
-    if (!key) return;
-    saveProviderApiKey('groqcloud', key);
-    setHasVoiceKey(true);
-    setVoiceApiKeyInput('');
-    setVoiceError('');
-    setShowVoiceSetup(false);
+    setVoiceStage('Connecting');
+    try {
+      await startGeminiLive({
+        signal: controller.signal,
+        instruction: activeCharacter.systemPrompt + ' Give concise, natural spoken replies.',
+        credential: async () => {
+          if (key) return { key };
+          const issue = httpsCallable(getFunctions(app), 'geminiLiveToken');
+          try { return (await issue()).data; }
+          catch (error) {
+            if (error.code === 'functions/resource-exhausted') throw new Error('Shared voice quota reached. Try later or add a Gemini voice key.');
+            throw new Error('Shared voice is unavailable. Sign in again or add a Gemini voice key from the companion menu.');
+          }
+        },
+        onStage: setVoiceStage,
+        onEnd: stopVoiceConversation,
+        onTurn: (input, output) => {
+          if (controller.signal.aborted) return;
+          const timestamp = new Date().toISOString();
+          const messages = [['user', input], ['model', output]].filter(([, text]) => text)
+            .map(([role, text]) => ({ id: crypto.randomUUID(), timestamp, role, text, modelUsed: LIVE_MODEL }));
+          const updated = getChatThreads().map(thread => thread.id === activeThread.id
+            ? { ...thread, title: thread.messages.length ? thread.title : (input || output).slice(0, 32),
+                updatedAt: timestamp, messages: [...thread.messages, ...messages] }
+            : thread);
+          saveChatThreads(updated);
+          setThreads(updated);
+        },
+      });
+    } catch (error) {
+      if (!controller.signal.aborted) stopVoiceConversation(error.name === 'NotAllowedError'
+        ? 'Allow microphone access to start a Gemini Live call.' : error.message);
+    }
   };
 
   return (
@@ -1140,6 +818,9 @@ export const GlassAIStudio = ({ onScrollToDashboard, isActive = true }) => {
                   </button>
                 ))}
 
+                <button type="button" onClick={openVoiceKey} className="w-full flex items-center gap-2 p-2 rounded-xl text-sm text-sky-200 hover:bg-white/10">
+                  <KeyRound size={15} /> Gemini voice API key
+                </button>
                 <div className="pt-1 border-t border-white/10">
                   <button
                     onClick={() => {
@@ -1320,71 +1001,15 @@ export const GlassAIStudio = ({ onScrollToDashboard, isActive = true }) => {
 
         {/* Input Bar */}
         <div className="p-4 border-t border-white/10 bg-black/35 shrink-0">
-          {isVoiceMode && (
-            <div className={`voice-stage voice-stage--${voiceStage} mb-3`} role="status" aria-live="polite">
-              <div className="voice-orb-wrap" aria-hidden="true">
-                <span className="voice-ring voice-ring--one" />
-                <span className="voice-ring voice-ring--two" />
-                <span className="voice-orb">
-                  {isSpeaking ? <Volume2 size={22} strokeWidth={1.8} /> : <Mic size={22} strokeWidth={1.8} />}
-                </span>
-              </div>
-              <div className="voice-stage-copy">
-                <div className="voice-stage-title">{voiceStageCopy[voiceStage][0]}</div>
-                <div className="voice-stage-subtitle">{voiceStageCopy[voiceStage][1]}</div>
-                <div className="voice-choice">
-                  <span>AI voice</span>
-                  <strong>{AI_VOICES.find((voice) => voice.id === sessionVoiceRef.current)?.label || 'Autumn'}</strong>
-                </div>
-                <div className="voice-source">AI generated · GroqCloud</div>
-              </div>
-              <div className="voice-bars" aria-hidden="true">
-                {Array.from({ length: 7 }, (_, index) => <i key={index} />)}
-              </div>
-              <button type="button" className="voice-end" onClick={() => stopVoiceConversation()} aria-label="End voice conversation">
-                <MicOff size={16} />
-              </button>
-            </div>
-          )}
-          {showVoiceSetup && (
-            <div className="mb-3 rounded-2xl border border-sky-300/25 bg-slate-900/95 p-3 text-xs text-slate-200">
-              <div className="flex items-center justify-between gap-2">
-                <strong className="text-sm text-white">AI voice setup</strong>
-                <button type="button" onClick={() => setShowVoiceSetup(false)} className="rounded-lg p-1 text-slate-400 hover:text-white" aria-label="Close voice setup"><X size={15} /></button>
-              </div>
-              <p className="mt-1 text-slate-400">GroqCloud Whisper understands your microphone; Orpheus creates expressive female speech in English. Each reply includes an audio quality check and uses your GroqCloud quota.</p>
-              <label className="mt-3 flex items-center gap-2 text-slate-300">
-                <span>AI voice</span>
-                <select value={preferredVoiceName} onChange={handleVoiceSelection} disabled={isVoiceMode} className="rounded-lg border border-white/20 bg-slate-800 px-2 py-1.5 text-white disabled:opacity-50">
-                  {AI_VOICES.map((voice) => <option key={voice.id} value={voice.id}>{voice.label}</option>)}
-                </select>
-                {isVoiceMode && <span className="text-slate-400">End the call to change voice.</span>}
-              </label>
-              <label className="mt-2 flex items-center gap-2 text-slate-300">
-                <span>Microphone</span>
-                <select value={selectedMicId} onChange={handleMicrophoneSelection} disabled={isVoiceMode} className="min-w-0 flex-1 rounded-lg border border-white/20 bg-slate-800 px-2 py-1.5 text-white disabled:opacity-50">
-                  <option value="">System default</option>
-                  {selectedMicId && !microphones.some((device) => device.deviceId === selectedMicId) && <option value={selectedMicId}>Saved microphone unavailable</option>}
-                  {microphones.map((device, index) => <option key={device.deviceId} value={device.deviceId}>{device.label || `Microphone ${index + 1}`}</option>)}
-                </select>
-              </label>
-              <p className="mt-1 text-[11px] text-slate-400">For steady stereo sound in Bluetooth buds, choose your laptop microphone if available. Microphone names appear after access is allowed.</p>
-              <form onSubmit={handleSaveVoiceKey} className="mt-3 flex gap-2">
-                <input type="password" autoComplete="off" value={voiceApiKeyInput} onChange={(event) => setVoiceApiKeyInput(event.target.value)} placeholder={hasVoiceKey ? 'Replace saved GroqCloud key' : 'Paste GroqCloud API key'} aria-label="GroqCloud voice API key" className="min-w-0 flex-1 rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-white outline-none focus:border-sky-400" />
-                <button type="submit" disabled={!voiceApiKeyInput.trim()} className="rounded-lg bg-sky-600 px-3 py-2 font-medium text-white disabled:opacity-40">Save key</button>
-              </form>
-              <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-slate-400">
-                <span>{hasVoiceKey ? 'GroqCloud key saved in this browser.' : 'A GroqCloud key is required for AI voice.'}</span>
-                <a href="https://console.groq.com/keys" target="_blank" rel="noreferrer" className="text-sky-300 hover:text-sky-200">Get a key ↗</a>
-              </div>
-            </div>
-          )}
-          <div className="flex items-center gap-2 bg-black/40 border border-white/15 focus-within:border-sky-400/60 focus-within:ring-1 focus-within:ring-sky-400/20 rounded-2xl px-3 py-2 shadow-inner transition">
+          {isVoiceMode && <div role="status" className="mb-2 text-sm text-sky-200">Gemini Live &middot; {voiceStage}</div>}
+          <div className="compound-field min-w-0 flex items-center gap-2 bg-black/40 border border-white/15 rounded-2xl px-3 py-2 shadow-inner transition">
             
             {/* Hands-free voice conversation */}
             <button
               onClick={toggleVoiceConversation}
               type="button"
+              disabled={isGenerating || !activeThread}
+              aria-label={isVoiceMode ? 'End Gemini Live call' : 'Talk to Gemini Live'}
               aria-pressed={isVoiceMode}
               className={`p-2 rounded-xl transition cursor-pointer inline-flex items-center gap-1.5 shrink-0 ${
                 isVoiceMode
@@ -1396,10 +1021,6 @@ export const GlassAIStudio = ({ onScrollToDashboard, isActive = true }) => {
               {isVoiceMode ? <MicOff size={16} /> : <Mic size={16} />}
               <span className="hidden sm:inline text-xs font-medium">{isVoiceMode ? 'End' : 'Talk'}</span>
             </button>
-            <button type="button" onClick={() => setShowVoiceSetup((value) => !value)} className="rounded-lg p-2 text-slate-400 hover:bg-white/10 hover:text-white" title="AI voice setup" aria-label="AI voice setup">
-              <KeyRound size={15} />
-            </button>
-
             {/* Textarea */}
             <textarea
               rows={1}
@@ -1418,7 +1039,7 @@ export const GlassAIStudio = ({ onScrollToDashboard, isActive = true }) => {
                   ? `Add a ${providerInfo.label} API key to chat with ${activeCharacter.name}...`
                   : `Ask ${activeCharacter.name}... (Press Enter to send, Shift+Enter for newline)`
               }
-              className="flex-1 bg-transparent text-white placeholder-gray-500 text-xs sm:text-sm focus:outline-none resize-none max-h-32 leading-relaxed disabled:opacity-40 disabled:cursor-not-allowed"
+              className="min-w-0 flex-1 bg-transparent text-white placeholder-gray-500 text-xs sm:text-sm focus:outline-none resize-none max-h-32 leading-relaxed disabled:opacity-40 disabled:cursor-not-allowed"
             />
 
             {/* Send Button */}
@@ -1434,6 +1055,33 @@ export const GlassAIStudio = ({ onScrollToDashboard, isActive = true }) => {
           {voiceError && <div className="mt-2 text-xs text-rose-300" role="alert">{voiceError}</div>}
         </div>
       </div>
+
+      {showVoiceKey && (
+        <div ref={voiceDialogRef} role="dialog" aria-modal="true" aria-label="Gemini voice API key" tabIndex={-1}
+          className="fixed inset-0 z-[100000] flex items-center justify-center bg-black/75 p-4">
+          <form className="w-full max-w-sm space-y-4 rounded-2xl bg-slate-900 p-5 text-white" onSubmit={event => {
+            event.preventDefault();
+            if (!voiceKeyInput.trim()) return;
+            localStorage.setItem(voiceKeyStorage, voiceKeyInput.trim());
+            stopVoiceConversation();
+            setVoiceKeyInput('');
+            setShowVoiceKey(false);
+          }}>
+            <label className="block">Gemini voice API key
+              <input autoComplete="off" type="password" value={voiceKeyInput} onChange={event => setVoiceKeyInput(event.target.value)}
+                placeholder="Paste a new key" className="mt-2 w-full rounded-lg bg-black/40 p-2" />
+            </label>
+            <p className="text-sm text-slate-300">A voice key stays in this browser and uses its own project quota. Without one, calls use your saved Gemini chat key or signed-in GlassTab access.</p>
+            {localStorage.getItem(voiceKeyStorage) && <button type="button" className="text-sm text-rose-300" onClick={() => {
+              localStorage.removeItem(voiceKeyStorage); stopVoiceConversation(); setVoiceKeyInput(''); setShowVoiceKey(false);
+            }}>Remove saved voice key</button>}
+            <div className="flex justify-end gap-4">
+              <button type="button" onClick={() => setShowVoiceKey(false)}>Cancel</button>
+              <button disabled={!voiceKeyInput.trim()} className="rounded-lg bg-blue-600 px-3 py-1.5 disabled:opacity-50">Save key</button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {/* ================= MODAL 1: BUILD CUSTOM CHARACTER ================= */}
       {showCustomCharModal && (

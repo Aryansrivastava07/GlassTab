@@ -78,8 +78,24 @@ Want to start using GlassTab right away? No Node.js, Git, or build tools are req
   - **GlassTab AI:** A sharp, concise, code-savvy assistant.
   - **Ginnie 🧞‍♂️:** A witty, dramatic genie trapped in your browser with playful banter.
   - **Custom Companion Studio:** Create your own AI companion with customized avatar, name, and personality prompt.
-- **Voice Dictation & Code Highlighting:** Native Web Speech API speech-to-text dictation and syntax-highlighted code blocks with 1-click copy.
-- **BYOK (Bring Your Own Key):** Add your free Google AI Studio key for 100% unlimited, unmetered AI chats.
+- **Gemini Live voice chat:** Talk streams microphone audio to Google and plays spoken replies inside the popup. Completed turns appear in the current conversation.
+- **Text models:** Select Grok, Gemini, OpenAI, Claude, OpenRouter or GroqCloud and supply that provider's API key. Typed chat works independently of voice setup.
+- **Code blocks:** Copy code from a reply in one click.
+
+#### Set up voice chat
+
+1. Open [Google AI Studio API Keys](https://aistudio.google.com/apikey). Choose a project and create a Gemini API key. If your existing project is missing, import it under **Dashboard > Projects**. Check your project's Live model access and quota in AI Studio.
+2. For a local test, load the unpacked `dist` folder, open the AI Studio popup and choose **Companion menu > Gemini voice API key**. Paste the key and save. Select **Talk**, allow microphone access, speak, and select **End** to disconnect. A voice key stays on this device. A previously configured Gemini chat key also works.
+3. For shared production access, use the Firebase project configured in `src/firebase.js` (currently `landing-page-efde6`). With a Firebase CLI account that can deploy Functions, run the commands below from the repository root. Enter the shared Gemini key at the secret prompt. Deploying Cloud Functions requires a billing-enabled Firebase project.
+
+   ```sh
+   npm ci --prefix functions
+   firebase functions:secrets:set GEMINI_API_KEY --project landing-page-efde6
+   firebase deploy --only functions:geminiLiveToken --project landing-page-efde6
+   ```
+
+   Signed-in users without a personal Gemini key can then select **Talk** immediately. The function issues a single-use, model-restricted token; only the token reaches the client. Guests can supply a personal voice key. Replacing or removing the voice key leaves the text provider settings intact. Test shared access in a signed-in browser with neither a voice key nor a Gemini chat key saved.
+
 
 ### 🖼️ 0ms Progressive Blur-Up Wallpapers
 - **Frame-0 Rendering:** No blank screens or stutter when opening new tabs.

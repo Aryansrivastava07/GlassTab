@@ -25,6 +25,7 @@ const tempRoot = resolve(tmpdir());
 const profile = await mkdtemp(join(tempRoot, 'glasstab-audit-'));
 const browser = spawn(process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Application/chrome.exe', [
   '--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
+  '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream', '--autoplay-policy=no-user-gesture-required',
   '--remote-debugging-port=0', `--user-data-dir=${profile}`, 'about:blank',
 ], { windowsHide: true, stdio: ['ignore', 'ignore', 'pipe'] });
 let ws;
@@ -91,6 +92,7 @@ try {
   };
   await send('Page.enable');
   await send('Runtime.enable');
+  await send('Emulation.setFocusEmulationEnabled', { enabled: true });
   await send('Fetch.enable', { patterns: [{ urlPattern: 'https://*' }] });
   await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
   await send('Page.addScriptToEvaluateOnNewDocument', { source: `
@@ -116,6 +118,27 @@ try {
     await key('Tab');
     assert(await evaluate(() => !!document.activeElement.closest('[role="dialog"]')), 'Tab escaped settings');
   }
+  await evaluate(() => [...document.querySelectorAll('button')].find(el => el.textContent === 'Widgets').click());
+  await waitFor(() => !!document.querySelector('fieldset select'));
+  for (const face of ['station', 'roman', 'digital']) {
+    await send('Runtime.evaluate', { expression: `{
+      const field = document.querySelector('fieldset select');
+      field.value = '${face}';
+      field.dispatchEvent(new Event('change', { bubbles: true }));
+    }` });
+    await waitFor(() => document.querySelector('.clock').classList.contains('face-' + document.querySelector('fieldset select').value));
+  }
+  await evaluate(() => {
+    const panel = document.querySelector('fieldset select').closest('fieldset');
+    const zone = panel.querySelectorAll('select')[1];
+    zone.value = 'UTC';
+    zone.dispatchEvent(new Event('change', { bubbles: true }));
+    for (const label of ['Show date', '24-hour time', 'Show seconds']) {
+      [...panel.querySelectorAll('label')].find(el => el.textContent === label).querySelector('input').click();
+    }
+  });
+  assert(await evaluate(() => document.querySelector('.digital-time').textContent === new Date().toISOString().slice(11, 16)));
+  assert(await evaluate(() => document.querySelector('.digital-readout').textContent.includes('24H')));
   await evaluate(() => [...document.querySelectorAll('button')].find(el => el.textContent === 'Accessibility').click());
   await waitFor(() => !![...document.querySelectorAll('h3')].find(el => el.textContent === 'Keyboard guide'));
   const { nodes } = await send('Accessibility.getFullAXTree');
@@ -135,6 +158,7 @@ try {
   assert(await evaluate(() => !document.querySelector('[inert]')), 'Background remained inert');
   await send('Page.reload');
   await waitFor(() => !!document.querySelector('.simple-dashboard'));
+  assert(await evaluate(() => !!document.querySelector('.simple-dashboard .face-digital')));
   assert(await evaluate(() => document.documentElement.classList.contains('large-text')), 'Preference did not persist');
   // Keep all optional widgets visible while testing the narrow layout.
   await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: false });
@@ -147,8 +171,17 @@ try {
   await send('Page.reload');
   await waitFor(() => !!document.querySelector('#searchInput'));
   await evaluate(() => document.querySelector('#searchInput').focus());
+  assert(await evaluate(() => {
+    const input = document.querySelector('#searchInput');
+    return input.getAttribute('aria-expanded') === 'false' &&
+      getComputedStyle(input).outlineStyle === 'none' &&
+      getComputedStyle(input.closest('.search-container')).outlineStyle === 'solid';
+  }), 'Focusing search must keep history closed and highlight the whole field');
   await key('ArrowDown');
   await waitFor(() => !!document.querySelector('#searchInput').getAttribute('aria-activedescendant'));
+  await key('Escape');
+  await evaluate(() => document.querySelector('#searchInput').click());
+  await waitFor(() => document.querySelector('#searchInput').getAttribute('aria-expanded') === 'true');
   await key('Tab');
   assert(await evaluate(() => document.activeElement.id !== 'searchInput'), 'Search trapped Tab');
   // Dialogs loaded on demand must close and release focus.
@@ -158,6 +191,54 @@ try {
   await waitFor(() => !document.querySelector('[aria-label="Notes and vault"]'));
   await evaluate(() => document.querySelector('[title="Open AI Studio (Ginnie & Companions)"]').click());
   await waitFor(() => document.querySelector('#ai-studio-overlay')?.getAttribute('role') === 'dialog');
+  await waitFor(() => !!document.querySelector('[aria-label="Talk to Gemini Live"]:not(:disabled)'));
+  assert(await evaluate(() => {
+    const composer = document.querySelector('#ai-studio-overlay textarea');
+    composer.focus();
+    const field = composer.closest('.compound-field');
+    return getComputedStyle(composer).outlineStyle === 'none' &&
+      getComputedStyle(field).outlineStyle === 'solid' &&
+      field.scrollWidth <= field.clientWidth + 1;
+  }), 'Chat composer focus and controls must fit the field at 320px');
+  await evaluate(() => document.querySelector('[aria-label="Talk to Gemini Live"]').click());
+  await waitFor(() => !!document.querySelector('[aria-label="Gemini voice API key"] input'));
+  await evaluate(() => document.querySelector('[aria-label="Gemini voice API key"] input').focus());
+  await send('Input.insertText', { text: 'test-only-voice-key' });
+  await evaluate(() => [...document.querySelectorAll('button')].find(button => button.textContent === 'Save key').click());
+  await waitFor(() => localStorage.getItem('glasstab_gemini_live_key') === 'test-only-voice-key');
+  await evaluate(() => {
+    const NativeSocket = window.WebSocket;
+    window.WebSocket = class extends NativeSocket {
+      constructor(url, protocols) {
+        if (!url.startsWith('wss://generativelanguage.googleapis.com/')) return new NativeSocket(url, protocols);
+        const fake = {
+          readyState: 1, bufferedAmount: 0,
+          close() { window.voiceSocketClosed = true; },
+          send(raw) {
+            const frame = JSON.parse(raw);
+            if (frame.setup) {
+              if (frame.setup.generationConfig.responseModalities[0] !== 'AUDIO') throw Error('Missing audio modality');
+              fake.onmessage({ data: '{"setupComplete":{}}' });
+            } else if (!window.sentMicrophone && frame.realtimeInput?.audio?.data) {
+              window.sentMicrophone = true;
+              const content = {
+                inputTranscription: { text: 'Browser microphone test' }, outputTranscription: { text: 'Voice reply test' },
+                modelTurn: { parts: [{ inlineData: { mimeType: 'audio/pcm;rate=24000', data: btoa('\0'.repeat(4800)) } }] },
+                turnComplete: true,
+              };
+              fake.onmessage({ data: JSON.stringify({ serverContent: content }) });
+            }
+          },
+        };
+        setTimeout(() => fake.onopen(), 0);
+        return fake;
+      }
+    };
+    document.querySelector('[aria-label="Talk to Gemini Live"]').click();
+  });
+  await waitFor(() => window.sentMicrophone && document.body.innerText.includes('Voice reply test'));
+  await evaluate(() => document.querySelector('[aria-label="End Gemini Live call"]').click());
+  await waitFor(() => window.voiceSocketClosed && !!document.querySelector('[aria-label="Talk to Gemini Live"]'));
   await key('Escape');
   await waitFor(() => document.querySelector('#ai-studio-overlay')?.getAttribute('aria-hidden') === 'true');
   // Test keyboard layout editing with the standard desktop arrangement.
@@ -182,6 +263,10 @@ try {
   });
   assert(after.x > before.x, 'Keyboard move failed');
   assert(after.width > before.width, 'Keyboard resize failed');
+  await evaluate(() => {
+    localStorage.removeItem('glasstab_clock_v1');
+    window.dispatchEvent(new Event('glasstab_clock_v1'));
+  });
   await send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
   await waitFor(() => !document.querySelector('#second'));
   assert.equal(errors.length, 0, errors.join('\n'));

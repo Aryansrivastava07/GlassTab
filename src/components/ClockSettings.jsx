@@ -35,6 +35,11 @@ export default function ClockSettings() {
         {zones.map(zone => <option key={zone} value={zone}>{zone.replaceAll('_', ' ')}</option>)}
       </select>
     </label>
+    {options.face === 'digital' && <label className="block">Compare another time zone
+      <select className={selectClass} value={options.comparison} onChange={e => setClockPreference('comparison', e.target.value)}>
+        <option value="">Off</option>
+        {zones.map(zone => <option key={zone} value={zone}>{zone.replaceAll('_', ' ')}</option>)}
+      </select></label>}
     {Object.entries({ seconds: 'Show seconds', date: 'Show date', ...(options.face === 'digital' && { hour24: '24-hour time' }) }).map(([key, label]) =>
       <label key={key} className="flex items-center gap-2">
         <input type="checkbox" checked={options[key]} onChange={e => setClockPreference(key, e.target.checked)} />{label}

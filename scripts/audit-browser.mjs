@@ -96,12 +96,47 @@ try {
   await send('Fetch.enable', { patterns: [{ urlPattern: 'https://*' }] });
   await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
   await send('Page.addScriptToEvaluateOnNewDocument', { source: `
-    localStorage.setItem('hasVisited', 'true');
     if (!localStorage.getItem('landing_features_config_v1')) localStorage.setItem('landing_features_config_v1', JSON.stringify({autoFocusSearch:false}));
   ` });
   await send('Page.navigate', { url: origin + '/?focus' });
   console.log('Loading the production dashboard.');
   await waitFor(() => Boolean(document.querySelector('#searchInput')));
+  await waitFor(() => !!document.querySelector('[aria-label="GlassTab quick start"]'));
+  const clickText = async text => send('Runtime.evaluate', {
+    expression: `[...document.querySelectorAll('button')].find(b => b.textContent.trim() === ${JSON.stringify(text)}).click()`,
+  });
+  await clickText('Continue');
+  await clickText('Daily motion');
+  await waitFor(() => !!document.querySelector('.daily-landscape[data-motion="true"]'));
+  await clickText('Continue');
+  await evaluate(() => document.querySelector('[aria-label="Today\'s focus"]').focus());
+  await send('Input.insertText', { text: 'Finish the prototype' });
+  await clickText('Save');
+  await waitFor(() => document.querySelector('[aria-label="GlassTab quick start"]').innerText.includes('Finish the prototype'));
+  await clickText('Open dashboard');
+  await clickText('Organize');
+  await waitFor(() => !!document.querySelector('[aria-label="Organize shortcuts"]'));
+  await evaluate(() => {
+    const dialog = document.querySelector('[aria-label="Organize shortcuts"]');
+    [...dialog.querySelectorAll('input[type=checkbox]')].slice(0, 2).forEach(box => box.click());
+    dialog.querySelector('input[list]').focus();
+  });
+  await send('Input.insertText', { text: 'Research' });
+  await clickText('Move shortcuts');
+  await waitFor(() => !!document.querySelector('[aria-label="Back to all shortcuts"]'));
+  await evaluate(() => document.querySelector('[aria-label="Back to all shortcuts"]').click());
+  await waitFor(() => !!document.querySelector('[aria-label="Open folder Research"]'));
+  await send('Page.reload');
+  await waitFor(() => !!document.querySelector('[aria-label="Open folder Research"]'));
+  assert(await evaluate(() => !document.querySelector('[aria-label="GlassTab quick start"]')));
+  await evaluate(() => {
+    const transfer = new DataTransfer();
+    const links = document.querySelectorAll('.speed-dials-dock a[draggable=true]');
+    links[0].dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: transfer }));
+    links[1].dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer }));
+  });
+  await waitFor(() => document.querySelectorAll('[aria-label="Organize shortcuts"] input:checked').length === 2);
+  await clickText('Cancel');
   const resources = await evaluate(() => performance.getEntriesByType('resource').map(e => e.name));
   assert(!resources.some(url => /GlassAIStudio-|Sidebar-|NotesModal-|CustomWidgetStudio-/.test(url)), 'Closed tools must not load at startup');
   await screenshot('desktop');

@@ -1,3 +1,4 @@
+import DailyFocus from './DailyFocus';
 import React, { useState, useEffect, useRef } from 'react';
 import useDialogFocus from '../hooks/useDialogFocus';
 import { createPortal } from 'react-dom';
@@ -699,6 +700,7 @@ const NotesModal = ({ isOpen, onClose }) => {
           {/* 1. TODOS TAB */}
           {activeTab === 'todos' && (
             <div className="space-y-4">
+              <DailyFocus />
               {/* Add Todo */}
               <div className="flex space-x-2.5">
                 <input

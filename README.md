@@ -25,6 +25,15 @@
 
 ## 🎬 Preview
 
+### Set up your first tab
+
+The skippable quick start lets you organize shortcuts, choose a wallpaper, and set today's focus. Reopen it any time from **Settings > Sync > Dashboard quick start**.
+
+- **Speed Dial folders.** Drag one shortcut onto another, name the folder, and confirm. For keyboard and touch, choose **Organize**, select shortcuts and enter a folder name. Leave the name blank to return them to the main dock.
+- **Daily wallpaper.** Under **Settings > Wallpaper**, choose **Daily photo** or **Daily motion**. Seven curated Unsplash landscapes rotate at local midnight. Motion adds a slow pan and drifting light. Lite mode and reduced motion show a still image. **My wallpaper** restores your personal background.
+- **Today's focus.** Save one priority from quick start or **Quick Notes & Todos > Todos**. It appears on the desktop notes button and resets for the next local day.
+- **World clock.** Select the digital face in **Settings > Widgets > Clock** to compare a second time zone.
+
 ### Live Animated Preview
 <p align="center">
   <img src="assets/glasstab-demo.gif" alt="GlassTab Dashboard Live Preview" width="100%" style="border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.3);" />

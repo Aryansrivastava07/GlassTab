@@ -1,355 +1,60 @@
-import { useState, useEffect, useRef } from 'react';
-import { X } from 'lucide-react';
+﻿import { useEffect, useRef, useState } from 'react';
+import { ArrowLeft, Compass, FolderOpen, Sparkles, X } from 'lucide-react';
+import { createPortal } from 'react-dom';
 import useDialogFocus from '../hooks/useDialogFocus';
+import { WallpaperChoices } from './DailyWallpaper';
+import DailyFocus from './DailyFocus';
 
-const WelcomePopup = () => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [currentFeature, setCurrentFeature] = useState(0);
-  const dialogRef = useRef(null);
-  useDialogFocus(dialogRef, isOpen, () => setIsOpen(false));
+const steps = ['Shortcuts', 'Wallpaper', 'Daily focus'];
 
+export default function WelcomePopup({ openAi, shortcutsEnabled }) {
+  const [open, setOpen] = useState(() => !localStorage.getItem('hasVisited'));
+  const [step, setStep] = useState(0);
+  const ref = useRef(null);
+  function finish(action) {
+    localStorage.setItem('hasVisited', 'true');
+    setOpen(false);
+    if (action) requestAnimationFrame(action);
+  }
+  useDialogFocus(ref, open, () => finish());
   useEffect(() => {
-    // Show popup on first visit
-    const hasVisited = localStorage.getItem('hasVisited');
-    if (!hasVisited) {
-      setIsOpen(true);
-      localStorage.setItem('hasVisited', 'true');
-    }
+    const replay = () => { setStep(0); setOpen(true); };
+    window.addEventListener('glasstab_show_welcome', replay);
+    return () => window.removeEventListener('glasstab_show_welcome', replay);
   }, []);
-
-  const features = [
-    {
-      id: 1,
-      title: 'Customize your favourite and Speed Dials.',
-      description: 'Click on the + icon to add your favourite websites and speed dials.',
-      icon: '➕',
-      details: null
-    },
-    {
-      id: 2,
-      title: 'Search on any search engine',
-      description: 'Add Special characters before your search keyterm to search on your preferred engine',
-      icon: '🔍',
-      details: [
-        '"g " - Google',
-        '"b " - Bing',
-        '"y " - Youtube'
-      ]
-    },
-    {
-      id: 3,
-      title: 'Use Shortcuts to be faster than others!',
-      description: 'Boost your productivity with these shortcuts!',
-      icon: '⌨️',
-      details: [
-        'Tab - Move between controls',
-        'Ctrl + V - Paste last copied text in search box',
-        'Shift + Backspace - Delete entire search query'
-      ]
-    },
-    {
-      id: 4,
-      title: 'Real Time Weather and clock',
-      description: 'Stay updated with the latest weather and time information directly on your landing page.',
-      icon: '🌤️',
-      details: null
-    }
-  ];
-
-  const nextFeature = () => {
-    if (currentFeature === features.length - 1) {
-      setIsOpen(false);
-      return;
-    }
-    setCurrentFeature((prev) => (prev + 1) % features.length);
-  };
-
-  const goToFeature = (index) => {
-    setCurrentFeature(index);
-  };
-
-  const closePopup = () => {
-    setIsOpen(false);
-  };
-
-  if (!isOpen) return null;
-
-  const current = features[currentFeature];
-
-  return (
-    <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Welcome to GlassTab" tabIndex={-1} className="popupOverlay">
-      <div className="popup">
-        <div className="closeBtn">
-          <button type="button" aria-label="Close welcome" onClick={closePopup}>
-            <X size={24} />
-          </button>
-        </div>
-
-        <h1>Welcome to Your Own Landing Page</h1>
-        
-        <div className="popupHeading">
-          A few ways to make this dashboard yours.
-        </div>
-
-        <div className="features">
-          <div className={`feature feature${current.id}`}>
-            <div className="featureIcon">{current.icon}</div>
-            <div className="featureContent">
-              <h2>{current.title}</h2>
-              <p>{current.description}</p>
-              
-              {current.details && (
-                <div className="featureDetails">
-                  {current.details.map((detail, index) => (
-                    <p key={index} className="detailItem">
-                      {detail.includes('Ctrl') || detail.includes('Shift') ? (
-                        <span className="kbd">
-                          {detail.split(' - ')[0]}
-                        </span>
-                      ) : (
-                        detail
-                      )}
-                      {detail.includes(' - ') && (
-                        <span> - {detail.split(' - ')[1]}</span>
-                      )}
-                    </p>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div className="carouselIndicators">
-          {features.map((_, index) => (
-            <button
-              type="button"
-              aria-label={`Show tip ${index + 1}`}
-              aria-pressed={index === currentFeature}
-              key={index}
-              className={`indicator ${index === currentFeature ? 'indicatorHighlight' : ''}`}
-              onClick={() => goToFeature(index)}
-            />
-          ))}
-        </div>
-
-        <div className="buttons">
-          <button type="button" onClick={closePopup} className="btnClose">
-            Close
-          </button>
-          <button type="button" onClick={nextFeature} className="btnNext">
-            {currentFeature === features.length - 1 ? 'Finish' : 'Next'}
-          </button>
-        </div>
+  if (!open) return null;
+  return createPortal(<div className="fixed inset-0 z-[100005] grid place-items-center bg-black/70 p-4 backdrop-blur-sm">
+    <div ref={ref} role="dialog" aria-modal="true" aria-label="GlassTab quick start" tabIndex={-1}
+      className="max-h-[92dvh] w-full max-w-md overflow-auto rounded-3xl border border-sky-200/20 bg-[#101722] p-6 text-white shadow-2xl">
+      <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-sm font-semibold text-sky-200"><Compass size={18}/> GlassTab quick start</span>
+        <button aria-label="Skip quick start" onClick={() => finish()} className="rounded-lg p-2 hover:bg-white/10"><X size={18}/></button></div>
+      <nav aria-label="Quick start steps" className="my-5 flex gap-2">
+        {steps.map((label, i) => <button key={label} onClick={() => setStep(i)} aria-current={step === i ? 'step' : undefined}
+          className={'flex-1 border-b-2 pb-2 text-xs ' + (step === i ? 'border-sky-300 text-white' : 'border-white/10 text-slate-400')}>{label}</button>)}
+      </nav>
+      {step === 0 && <>
+        <h2 className="text-2xl font-semibold">Give your everyday sites a home</h2>
+        <p className="my-3 text-sm leading-relaxed text-slate-300">Open a tile to visit a site. Drag one shortcut onto another to name a folder, or use Organize to group several at once.</p>
+        {shortcutsEnabled && <button className="flex items-center gap-2 rounded-xl bg-white/10 p-3 text-sm" onClick={() => finish(() => window.dispatchEvent(new Event('glasstab_organize_dials')))}><FolderOpen size={17}/> Organize my shortcuts</button>}
+        <p className="mt-4 text-xs text-slate-400">Search from the dashboard with /, or type “y ” before a search to find a video.</p>
+      </>}
+      {step === 1 && <>
+        <h2 className="text-2xl font-semibold">Choose what you open tomorrow</h2>
+        <p className="my-3 text-sm leading-relaxed text-slate-300">Keep your wallpaper, rotate through Unsplash landscapes, or add slow camera movement and drifting light. Daily scenes change at local midnight.</p>
+        <WallpaperChoices />
+        <p className="mt-4 text-xs text-slate-400">Change this in Settings → Wallpaper. Move and resize widgets in Settings → Widgets.</p>
+      </>}
+      {step === 2 && <>
+        <h2 className="text-2xl font-semibold">What matters today?</h2>
+        <p className="my-3 text-sm text-slate-300">Pick one priority. Find it again in Quick Notes &amp; Todos → Todos.</p>
+        <DailyFocus />
+        {openAi && <button onClick={() => finish(openAi)} className="mt-3 flex items-center gap-2 text-sm text-sky-300"><Sparkles size={15}/> Explore AI Studio</button>}
+      </>}
+      <div className="mt-6 flex items-center justify-between border-t border-white/10 pt-4">
+        {step ? <button className="flex items-center gap-1 text-sm text-slate-300" onClick={() => setStep(step - 1)}><ArrowLeft size={14}/> Back</button>
+          : <button className="text-sm text-slate-300" onClick={() => finish()}>Skip setup</button>}
+        <button onClick={() => step === 2 ? finish() : setStep(step + 1)} className="rounded-full bg-sky-300 px-5 py-2 text-sm font-semibold text-slate-950">{step === 2 ? 'Open dashboard' : 'Continue'}</button>
       </div>
-
-      <style>{`
-        .popupOverlay {
-          position: fixed;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
-          background: rgba(0, 0, 0, 0.7);
-          backdrop-filter: blur(4px);
-          -webkit-backdrop-filter: blur(4px);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          z-index: 1000;
-          padding: 1rem;
-        }
-
-        .popup {
-          background: rgba(24, 28, 38, 0.95);
-          border: 1px solid rgba(255, 255, 255, 0.15);
-          border-radius: 20px;
-          max-width: 600px;
-          width: 100%;
-          max-height: 90vh;
-          overflow-y: auto;
-          position: relative;
-          box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5);
-          color: white;
-        }
-
-        .closeBtn {
-          position: absolute;
-          top: 1rem;
-          right: 1rem;
-          z-index: 10;
-        }
-
-        .closeBtn button {
-          background: rgba(255, 255, 255, 0.1);
-          color: white;
-          border: 1px solid rgba(255, 255, 255, 0.15);
-          border-radius: 50%;
-          width: 36px;
-          height: 36px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          cursor: pointer;
-          transition: all 0.2s;
-        }
-
-        .closeBtn button:hover {
-          background: rgba(255, 255, 255, 0.2);
-        }
-
-        h1 {
-          text-align: center;
-          color: #ffffff;
-          margin: 2rem 2rem 0.5rem;
-          font-size: 1.8rem;
-          font-weight: 700;
-        }
-
-        .popupHeading {
-          text-align: center;
-          color: #94a3b8;
-          margin: 0 2rem 2rem;
-          font-size: 1.05rem;
-        }
-
-        .textHighlight {
-          color: #60a5fa;
-          font-weight: 600;
-        }
-
-        .features {
-          padding: 0 2rem;
-        }
-
-        .feature {
-          display: flex;
-          align-items: flex-start;
-          gap: 1.5rem;
-          margin-bottom: 2rem;
-        }
-
-        .featureIcon {
-          font-size: 3rem;
-          flex-shrink: 0;
-        }
-
-        .featureContent h2 {
-          color: #f1f5f9;
-          margin-bottom: 0.5rem;
-          font-size: 1.25rem;
-          font-weight: 600;
-        }
-
-        .featureContent p {
-          color: #94a3b8;
-          line-height: 1.6;
-          margin-bottom: 1rem;
-        }
-
-        .featureDetails {
-          background: rgba(255, 255, 255, 0.05);
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          border-radius: 12px;
-          padding: 1rem;
-        }
-
-        .detailItem {
-          margin: 0.5rem 0;
-          color: #e2e8f0;
-          font-size: 0.9rem;
-        }
-
-        .kbd {
-          background: rgba(255, 255, 255, 0.12);
-          border: 1px solid rgba(255, 255, 255, 0.2);
-          border-radius: 6px;
-          padding: 0.25rem 0.5rem;
-          font-family: monospace;
-          font-size: 0.8rem;
-          color: #93c5fd;
-          margin-right: 0.5rem;
-        }
-
-        .carouselIndicators {
-          display: flex;
-          justify-content: center;
-          gap: 0.5rem;
-          padding: 1rem 2rem;
-          list-style: none;
-          margin: 0;
-        }
-
-        .indicator {
-          width: 8px;
-          height: 8px;
-          border-radius: 50%;
-          background: rgba(255, 255, 255, 0.25);
-          cursor: pointer;
-          transition: all 0.2s;
-        }
-
-        .indicatorHighlight {
-          background: #3b82f6;
-          transform: scale(1.2);
-        }
-
-        .buttons {
-          display: flex;
-          gap: 1rem;
-          padding: 1rem 2rem 2rem;
-        }
-
-        .btnClose, .btnNext {
-          flex: 1;
-          padding: 0.75rem 1.5rem;
-          border: none;
-          border-radius: 10px;
-          font-weight: 600;
-          cursor: pointer;
-          transition: all 0.2s;
-        }
-
-        .btnClose {
-          background: rgba(255, 255, 255, 0.1);
-          border: 1px solid rgba(255, 255, 255, 0.15);
-          color: white;
-        }
-
-        .btnClose:hover {
-          background: rgba(255, 255, 255, 0.18);
-        }
-
-        .btnNext {
-          background: #2563eb;
-          color: white;
-        }
-
-        .btnNext:hover {
-          background: #1d4ed8;
-        }
-
-        @media (max-width: 640px) {
-          .feature {
-            flex-direction: column;
-            text-align: center;
-          }
-
-          .featureIcon {
-            margin: 0 auto;
-          }
-
-          h1 {
-            font-size: 1.5rem;
-          }
-
-          .popupHeading {
-            font-size: 1rem;
-          }
-        }
-      `}</style>
     </div>
-  );
-};
-
-export default WelcomePopup;
+  </div>, document.body);
+}

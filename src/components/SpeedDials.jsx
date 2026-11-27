@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import useDialogFocus from '../hooks/useDialogFocus';
-import { Plus, X } from "lucide-react";
+import { Plus, X, FolderInput, ChevronLeft } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import {
-  initializeUserData,
+  moveSpeedDials,
   addSpeedDial,
   deleteSpeedDial,
   subscribeToUserData,
@@ -32,8 +32,34 @@ const SpeedDials = ({ onCountChange }) => {
   // Synchronous local DB read on frame 0 (no flicker!)
   const [speedDials, setSpeedDials] = useState(() => {
     const cached = getCachedUserData(effectiveUid);
-    return cached?.speedDials?.length > 0 ? cached.speedDials : FALLBACK_SPEED_DIALS;
+    return Array.isArray(cached?.speedDials) ? cached.speedDials : FALLBACK_SPEED_DIALS;
   });
+  const [folder, setFolder] = useState('');
+  const [organizing, setOrganizing] = useState(false);
+  const [destination, setDestination] = useState('');
+  const [picked, setPicked] = useState([]);
+  const groupDialog = useRef(null);
+  useDialogFocus(groupDialog, organizing, () => setOrganizing(false));
+  const folders = [...new Set(speedDials.map(item => item.folder).filter(Boolean))];
+  const activeFolder = folders.includes(folder) ? folder : '';
+  const visibleDials = speedDials.filter(item => (item.folder || '') === activeFolder);
+  const rootCount = folders.length + speedDials.filter(item => !item.folder).length;
+  function organize(ids = [], target = '') {
+    setPicked(ids); setDestination(target); setOrganizing(true);
+  }
+  useEffect(() => {
+    const open = () => organize();
+    window.addEventListener('glasstab_organize_dials', open);
+    return () => window.removeEventListener('glasstab_organize_dials', open);
+  }, []);
+  function dropShortcut(event, target) {
+    event.preventDefault();
+    const id = event.dataTransfer.getData('application/x-glasstab-dial');
+    const source = speedDials.find(item => String(item.id) === id);
+    if (!source || source.id === target?.id) return;
+    if (typeof target === 'string') moveSpeedDials(effectiveUid, [source.id], target);
+    else organize([source.id, target.id], target.folder || '');
+  }
   const [loading, setLoading] = useState(false);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const dialogRef = useRef(null);
@@ -84,9 +110,9 @@ const SpeedDials = ({ onCountChange }) => {
 
   useEffect(() => {
     if (onCountChange) {
-      onCountChange(speedDials.length);
+      onCountChange(rootCount);
     }
-  }, [speedDials.length, onCountChange]);
+  }, [rootCount, onCountChange]);
 
   // Measure container dimensions on resize
   useEffect(() => {
@@ -107,12 +133,12 @@ const SpeedDials = ({ onCountChange }) => {
 
   useEffect(() => {
     const cached = getCachedUserData(effectiveUid);
-    if (cached?.speedDials?.length > 0) {
-      setSpeedDials(cached.speedDials);
-    }
+    setSpeedDials(Array.isArray(cached?.speedDials) ? cached.speedDials : FALLBACK_SPEED_DIALS);
+    setFolder('');
+    setOrganizing(false);
 
     const unsubscribe = subscribeToUserData(effectiveUid, (userData) => {
-      if (userData && Array.isArray(userData.speedDials) && userData.speedDials.length > 0) {
+      if (userData && Array.isArray(userData.speedDials)) {
         setSpeedDials(userData.speedDials);
       }
       setLoading(false);
@@ -141,6 +167,7 @@ const SpeedDials = ({ onCountChange }) => {
       }
 
       const item = {
+        folder: activeFolder,
         name: newItem.name.trim(),
         url: finalUrl,
         logo:
@@ -174,7 +201,7 @@ const SpeedDials = ({ onCountChange }) => {
 
   // Extra width/capacity will render as dotted thumbnail placeholder areas (hidden on compact screens)
   const isNarrow = containerSize.width < 640;
-  const emptySlotsCount = isNarrow ? 0 : Math.max(0, totalCapacity - speedDials.length);
+  const emptySlotsCount = isNarrow ? 0 : Math.max(0, totalCapacity - (activeFolder ? visibleDials.length : rootCount));
 
   return (
     <div
@@ -185,6 +212,10 @@ const SpeedDials = ({ onCountChange }) => {
         ...getTextStyleForPart(glassTheme.speedDial),
       }}
     >
+      <div className="flex w-full items-center gap-2 px-1 pb-1 text-xs">
+        {activeFolder && <button type="button" className="flex min-w-0 items-center gap-1 rounded px-1" onClick={() => setFolder('')} aria-label="Back to all shortcuts"><ChevronLeft size={15} />{activeFolder}</button>}
+        <button type="button" onClick={() => organize([], activeFolder)} className="ml-auto mr-7 flex items-center gap-1 rounded px-1 text-slate-300 hover:text-white"><FolderInput size={14}/> Organize</button>
+      </div>
       {/* Quick Add shortcut button on dock corner */}
       <button
         onClick={() => setShowAddDialog(true)}
@@ -197,12 +228,22 @@ const SpeedDials = ({ onCountChange }) => {
 
       <div className="my-auto w-full flex items-center justify-center gap-2 sm:gap-3 flex-wrap">
         {/* 1. Existing Shortcut Items */}
-        {speedDials.map((item) => (
+        {!activeFolder && folders.map(name => (
+          <button key={name} type="button" aria-label={'Open folder ' + name}
+            onDragOver={e => e.preventDefault()} onDrop={e => dropShortcut(e, name)}
+            onClick={() => setFolder(name)} className="flex w-16 flex-col items-center gap-1 rounded-xl p-1 hover:bg-white/10 sm:w-20">
+            <span className="grid size-12 grid-cols-2 grid-rows-2 gap-0.5 overflow-hidden rounded-xl border border-sky-200/30 bg-slate-800/80 p-1.5">
+              {speedDials.filter(item => item.folder === name).slice(0,4).map(item => <SiteThumbnail key={item.id} {...item} className="size-3.5" />)}
+            </span><span className="max-w-full truncate text-xs">{name}</span>
+          </button>
+        ))}
+        {visibleDials.map((item) => (
           <div
             key={item.id}
             className="flex flex-col items-center justify-center p-1.5 rounded-xl hover:bg-white/10 transition-all duration-200 group/item relative cursor-pointer w-16 sm:w-20"
           >
-            <a href={item.url} aria-label={`Open ${item.name}`} className="flex flex-col items-center rounded-lg">
+            <a href={item.url} draggable onDragStart={e => e.dataTransfer.setData('application/x-glasstab-dial', String(item.id))}
+              onDragOver={e => e.preventDefault()} onDrop={e => dropShortcut(e, item)} aria-label={`Open ${item.name}`} className="flex flex-col items-center rounded-lg">
             {/* Icon Tile */}
             <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-black/40 border border-white/15 flex items-center justify-center shadow-md group-hover/item:scale-105 group-hover/item:border-white/35 group-hover/item:shadow-blue-500/20 group-hover/item:shadow-lg transition-all duration-200 overflow-hidden">
               <SiteThumbnail
@@ -287,6 +328,26 @@ const SpeedDials = ({ onCountChange }) => {
         )}
       </div>
 
+      {organizing && createPortal(
+        <div className="fixed inset-0 z-[99999] grid place-items-center bg-black/70 p-4" onClick={() => setOrganizing(false)}>
+          <form ref={groupDialog} role="dialog" aria-modal="true" aria-label="Organize shortcuts" tabIndex={-1}
+            className="flex max-h-[85dvh] w-full max-w-sm flex-col gap-3 rounded-2xl border border-white/15 bg-slate-900 p-5 text-sm text-white"
+            onClick={e => e.stopPropagation()} onSubmit={e => {
+              e.preventDefault(); moveSpeedDials(effectiveUid, picked, destination);
+              setFolder(destination.trim()); setOrganizing(false);
+            }}>
+            <h2 className="font-semibold">Organize shortcuts</h2>
+            <label>Folder name<input value={destination} onChange={e => setDestination(e.target.value)} maxLength={40}
+              placeholder="Leave blank for the main dock" list="dial-folders" className="mt-1 w-full rounded-lg bg-black/40 p-2" /></label>
+            <datalist id="dial-folders">{folders.map(name => <option key={name} value={name}/>)}</datalist>
+            <div className="overflow-auto">{speedDials.map(item => <label key={item.id} className="flex items-center gap-2 py-2">
+              <input type="checkbox" checked={picked.includes(item.id)} onChange={e => setPicked(e.target.checked ? [...picked, item.id] : picked.filter(id => id !== item.id))} />
+              {item.name}<small className="ml-auto text-slate-400">{item.folder}</small>
+            </label>)}</div>
+            <div className="flex justify-end gap-3"><button type="button" onClick={() => setOrganizing(false)}>Cancel</button>
+              <button disabled={!picked.length} className="rounded-lg bg-sky-700 px-3 py-2 disabled:opacity-40">Move shortcuts</button></div>
+          </form>
+        </div>, document.body)}
       {/* Add Modal rendered via portal directly on document.body */}
       {showAddDialog &&
         createPortal(

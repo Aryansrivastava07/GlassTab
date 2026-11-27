@@ -1,3 +1,4 @@
+import { DailyWallpaper, useWallpaperMode } from './DailyWallpaper';
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { updateWallpaper, subscribeToUserData } from '../services/databaseService';
@@ -41,8 +42,7 @@ export const readWallpaperMeta = (uid) => {
   }
 };
 
-const WallpaperManager = () => {
-  const reducedMotion = useReducedMotion();
+const PersonalWallpaper = ({ features, stillWallpaper }) => {
   const videoRef = useRef(null);
   const defaultWallpaper = localWallpaper;
   const { currentUser } = useAuth();
@@ -61,16 +61,6 @@ const WallpaperManager = () => {
   };
 
   const initialMeta = readWallpaperMeta(effectiveUid);
-  const [features, setFeatures] = useState(() => getStoredFeatures());
-  const stillWallpaper = reducedMotion || features.liteMode || !features.videoWallpapers;
-  useEffect(() => {
-    const handleFeatures = (e) => {
-      setFeatures(e.detail || getStoredFeatures());
-    };
-    window.addEventListener('landing_features_updated', handleFeatures);
-    return () => window.removeEventListener('landing_features_updated', handleFeatures);
-  }, []);
-
   const [thumbnailSrc, setThumbnailSrc] = useState(() => initialMeta?.thumbnail || null);
   const [isFullLoaded, setIsFullLoaded] = useState(() => {
     if (initialMeta?.thumbnail) return false;
@@ -485,4 +475,19 @@ export const useWallpaper = () => {
   return { wallpaper, updateWallpaperUrl };
 };
 
-export default WallpaperManager;
+export default function WallpaperManager() {
+  const mode = useWallpaperMode();
+  const reducedMotion = useReducedMotion();
+  const [features, setFeatures] = useState(() => getStoredFeatures());
+  const stillWallpaper = reducedMotion || features.liteMode || !features.videoWallpapers;
+  useEffect(() => {
+    const handleFeatures = (e) => {
+      setFeatures(e.detail || getStoredFeatures());
+    };
+    window.addEventListener('landing_features_updated', handleFeatures);
+    return () => window.removeEventListener('landing_features_updated', handleFeatures);
+  }, []);
+
+  return mode === 'personal' ? <PersonalWallpaper features={features} stillWallpaper={stillWallpaper} />
+    : <DailyWallpaper mode={mode} still={stillWallpaper} />;
+}

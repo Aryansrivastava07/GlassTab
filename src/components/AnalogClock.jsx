@@ -15,11 +15,12 @@ const AnalogClock = () => {
   const formats = useMemo(() => {
     const timeZone = options.zone || undefined;
     return {
+      comparison: options.face === 'digital' && options.comparison ? new Intl.DateTimeFormat(undefined, { timeZone: options.comparison, timeZoneName: 'short', hourCycle: options.hour24 ? 'h23' : 'h12', hour: 'numeric', minute: '2-digit' }) : null,
       parts: new Intl.DateTimeFormat('en-GB', { timeZone, hourCycle: 'h23', hour: '2-digit', minute: '2-digit', second: '2-digit' }),
       date: new Intl.DateTimeFormat(undefined, { timeZone, month: 'short', day: 'numeric' }),
       label: new Intl.DateTimeFormat(undefined, { timeZone, hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }),
     };
-  }, [options.zone]);
+  }, [options.zone, options.face, options.comparison, options.hour24]);
 
   useEffect(() => {
     const update = (event) => { if (event.detail) setGlassTheme(event.detail); };
@@ -56,15 +57,16 @@ const AnalogClock = () => {
   const widgetTheme = glassTheme?.widgets;
   const parts = Object.fromEntries(formats.parts.formatToParts(now).map(part => [part.type, part.value]));
   const date = formats.date.format(now);
-  const timeLabel = formats.label.format(now) + (options.date ? ', ' + date : '');
+  const comparison = formats.comparison?.format(now);
+  const timeLabel = [formats.label.format(now), options.date && date, comparison].filter(Boolean).join(', ');
   return (
     <div ref={containerRef} role="img" title={timeLabel} aria-label={`Current time: ${timeLabel}`} className="w-full h-full flex items-center justify-center overflow-hidden rounded-full">
-      <ClockFace {...{ diameter, widgetTheme, options, parts, date, showSeconds }} />
+      <ClockFace {...{ diameter, widgetTheme, options, parts, date, showSeconds, comparison }} />
     </div>
   );
 };
 
-export function ClockFace({ diameter, widgetTheme, options, parts, date, showSeconds }) {
+export function ClockFace({ diameter, widgetTheme, options, parts, date, showSeconds, comparison }) {
   const hour = Number(parts.hour);
   const isLightBg = getLuminance(widgetTheme?.color || '#000000') > 0.55;
   const rotation = (degrees) => ({ animation: 'none', rotate: `${degrees - 180}deg` });
@@ -80,6 +82,7 @@ export function ClockFace({ diameter, widgetTheme, options, parts, date, showSec
           <div className="digital-detail">{options.hour24 ? '24H' : hour < 12 ? 'AM' : 'PM'}{showSeconds && ' · ' + parts.second + 's'}</div>
           <div className="digital-time">{options.hour24 ? parts.hour : hour % 12 || 12}:{parts.minute}</div>
           {options.date && <div className="digital-detail">{date}</div>}
+          {comparison && <div className="digital-detail">{comparison}</div>}
         </div> : <>
         {options.face === 'classic'
           ? <div>{Array.from({ length: 6 }, (_, index) => <div key={index} className="clockDial" />)}</div>

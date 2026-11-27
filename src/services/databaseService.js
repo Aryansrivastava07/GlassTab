@@ -144,6 +144,18 @@ export const addSpeedDial = async (userId, speedDial) => {
     return newSpeedDial;
 };
 
+// Move shortcuts without changing their IDs, URLs, order, or unrelated folder memberships.
+export const moveSpeedDials = (userId, ids, folder) => {
+    const uid = userId || 'local_guest';
+    const data = getOrSeedLocalData(uid);
+    const selected = new Set(ids);
+    const speedDials = data.speedDials.map(item => selected.has(item.id) ? { ...item, folder: folder.trim() } : item);
+    const updated = { ...data, speedDials, updatedAt: new Date().toISOString() };
+    updateCachedSpeedDials(uid, speedDials);
+    cacheUserData(uid, updated);
+    notifyLocalListeners(uid, updated);
+};
+
 // Delete speed dial (local only + stamps updatedAt)
 export const deleteSpeedDial = async (userId, speedDialId) => {
     const uid = userId || 'local_guest';

@@ -591,7 +591,8 @@ function AppContent() {
         {!features.standbyMode && features.notesButton && <NotesButton />}
 
       {/* First-time Welcome Popup */}
-      <WelcomePopup />
+      <WelcomePopup shortcutsEnabled={features.speedDials && !features.standbyMode}
+        openAi={features.aiStudio ? () => transitionTo('ai-studio') : null} />
 
       {/* Custom Widget Studio Modal */}
       {isStudioOpen && <Suspense fallback={<div role="status" className="loading-panel">Loading widget studio…</div>}><CustomWidgetStudio

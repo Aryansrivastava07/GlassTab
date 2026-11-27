@@ -2,6 +2,7 @@
 // Manifest V3 CSP-compliant external script (cannot be inline)
 (function () {
   try {
+    if (!localStorage.getItem('hasVisited')) return;
     var raw = localStorage.getItem('landing_features_config_v1');
     var autoFocus = true;
     if (raw) {

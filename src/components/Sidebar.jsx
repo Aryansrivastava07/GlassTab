@@ -1,3 +1,4 @@
+import { WallpaperChoices, setWallpaperMode } from './DailyWallpaper';
 import { useState, useEffect, useCallback } from 'react';
 import { X, Plus, Heart, Trash2, RotateCcw, Check, User, ShieldCheck, Move, Copy, ExternalLink, Cloud, Film, Layers, KeyRound, Pencil, RefreshCw, CloudDownload, CloudUpload, Sliders, Grid, Zap, BookOpen, Search, Clock, Sparkles, Loader2, AlertCircle, Focus } from 'lucide-react';
 import { SiteThumbnail } from '../utils/thumbnailHelper';
@@ -393,6 +394,7 @@ const Sidebar = ({
       wallpaperType: type,
       wallpaperMediaId: null,
     });
+    setWallpaperMode('personal');
     showNotice('Wallpaper updated!');
   };
 
@@ -434,6 +436,7 @@ const Sidebar = ({
         })
       );
 
+      setWallpaperMode('personal');
       await updateWallpaper(effectiveUid, null, {
         wallpaperId,
         wallpaperType: localRes.mediaType,
@@ -479,6 +482,7 @@ const Sidebar = ({
       wallpaperType: 'image',
       wallpaperMediaId: null,
     });
+    setWallpaperMode('personal');
     showNotice('Reset to default wallpaper');
   };
 
@@ -654,6 +658,11 @@ const Sidebar = ({
           {/* TAB 1: WALLPAPER */}
           {normalizedTab === 'wallpaper' && (
             <div className="space-y-5">
+              <section className="rounded-xl border border-white/10 bg-white/5 p-4 space-y-3">
+                <h4 className="text-sm font-semibold">Wallpaper rotation</h4>
+                <WallpaperChoices />
+                <p className="text-xs text-slate-300">A different Unsplash landscape each day. Daily motion adds a slow pan and shifting light.</p>
+              </section>
               {/* Upload local image or video */}
               <div className="p-4 bg-white/5 border border-white/10 rounded-xl space-y-3">
                 <div className="flex items-center justify-between">
@@ -1380,6 +1389,10 @@ const Sidebar = ({
           {/* TAB 4: ACCOUNT, MEDIA & SYNC */}
           {normalizedTab === 'account' && (
             <div className="space-y-4">
+              <button type="button" className="rounded-xl border border-sky-400/30 bg-sky-500/10 px-4 py-2 text-sm text-sky-200" onClick={() => {
+                onClose();
+                requestAnimationFrame(() => window.dispatchEvent(new Event('glasstab_show_welcome')));
+              }}>Dashboard quick start</button>
               <section className="p-4 bg-white/5 border border-white/10 rounded-xl space-y-3">
                 <h4 className="text-sm font-semibold">Extension updates</h4>
                 <p className="text-xs text-gray-400">Choose your installed GlassTab folder in the updater, then reload GlassTab from the Extensions page.</p>

@@ -119,26 +119,24 @@ try {
     assert(await evaluate(() => !!document.activeElement.closest('[role="dialog"]')), 'Tab escaped settings');
   }
   await evaluate(() => [...document.querySelectorAll('button')].find(el => el.textContent === 'Widgets').click());
-  await waitFor(() => !!document.querySelector('fieldset select'));
+  await waitFor(() => document.querySelectorAll('input[name="clock-face"]').length === 4);
   for (const face of ['station', 'roman', 'digital']) {
-    await send('Runtime.evaluate', { expression: `{
-      const field = document.querySelector('fieldset select');
-      field.value = '${face}';
-      field.dispatchEvent(new Event('change', { bubbles: true }));
-    }` });
-    await waitFor(() => document.querySelector('.clock').classList.contains('face-' + document.querySelector('fieldset select').value));
+    await send('Runtime.evaluate', { expression: `document.querySelector('input[name="clock-face"][value="${face}"]').click()` });
+    await waitFor(() => !!document.querySelector('[role="img"] > .face-' + document.querySelector('input[name="clock-face"]:checked').value));
   }
   await evaluate(() => {
     const panel = document.querySelector('fieldset select').closest('fieldset');
-    const zone = panel.querySelectorAll('select')[1];
+    const zone = panel.querySelector('select');
     zone.value = 'UTC';
     zone.dispatchEvent(new Event('change', { bubbles: true }));
     for (const label of ['Show date', '24-hour time', 'Show seconds']) {
       [...panel.querySelectorAll('label')].find(el => el.textContent === label).querySelector('input').click();
     }
   });
-  assert(await evaluate(() => document.querySelector('.digital-time').textContent === new Date().toISOString().slice(11, 16)));
-  assert(await evaluate(() => document.querySelector('.digital-readout').textContent.includes('24H')));
+  assert(await evaluate(() => document.querySelector('[role="img"] .digital-time').textContent === new Date().toISOString().slice(11, 16)));
+  assert(await evaluate(() => document.querySelector('[role="img"] .digital-readout').textContent.includes('24H')));
+  await evaluate(() => [...document.querySelectorAll('button')].find(el => el.textContent === 'Sync').click());
+  await waitFor(() => [...document.querySelectorAll('a')].some(a => a.textContent.includes('Update to latest version') && a.href === 'https://aryansrivastava07.github.io/GlassTab/update/'));
   await evaluate(() => [...document.querySelectorAll('button')].find(el => el.textContent === 'Accessibility').click());
   await waitFor(() => !![...document.querySelectorAll('h3')].find(el => el.textContent === 'Keyboard guide'));
   const { nodes } = await send('Accessibility.getFullAXTree');
@@ -268,7 +266,7 @@ try {
     window.dispatchEvent(new Event('glasstab_clock_v1'));
   });
   await send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
-  await waitFor(() => !document.querySelector('#second'));
+  await waitFor(() => !document.querySelector('.clock-second'));
   assert.equal(errors.length, 0, errors.join('\n'));
   console.log('PASS: deferred loading; modal focus containment/restoration; saved accessibility preferences; 390px/320px reflow; search Tab/ARIA; notes and AI dialogs; keyboard widget move/resize; system reduced motion; no runtime exceptions.');
   console.log(`Screenshots: ${output}`);

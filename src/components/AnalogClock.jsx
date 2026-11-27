@@ -54,15 +54,22 @@ const AnalogClock = () => {
   }, [showSeconds]);
 
   const widgetTheme = glassTheme?.widgets;
-  const isLightBg = getLuminance(widgetTheme?.color || '#000000') > 0.55;
   const parts = Object.fromEntries(formats.parts.formatToParts(now).map(part => [part.type, part.value]));
-  const hour = Number(parts.hour);
   const date = formats.date.format(now);
   const timeLabel = formats.label.format(now) + (options.date ? ', ' + date : '');
+  return (
+    <div ref={containerRef} role="img" title={timeLabel} aria-label={`Current time: ${timeLabel}`} className="w-full h-full flex items-center justify-center overflow-hidden rounded-full">
+      <ClockFace {...{ diameter, widgetTheme, options, parts, date, showSeconds }} />
+    </div>
+  );
+};
+
+export function ClockFace({ diameter, widgetTheme, options, parts, date, showSeconds }) {
+  const hour = Number(parts.hour);
+  const isLightBg = getLuminance(widgetTheme?.color || '#000000') > 0.55;
   const rotation = (degrees) => ({ animation: 'none', rotate: `${degrees - 180}deg` });
 
   return (
-    <div ref={containerRef} role="img" title={timeLabel} aria-label={`Current time: ${timeLabel}`} className="w-full h-full flex items-center justify-center overflow-hidden rounded-full">
       <div className={`clock face-${options.face} shrink-0`} aria-hidden="true" style={{
         '--clock-diameter': `${diameter}px`, '--clock-size': `${diameter}px`,
         '--clock-face-filter': isLightBg ? 'none' : 'invert(1)',
@@ -84,14 +91,13 @@ const AnalogClock = () => {
             </svg>}
         {options.date && <span className="analog-date">{date}</span>}
         <div>
-          <div className="clockHand" id="minute" style={rotation(Number(parts.minute) * 6)} />
-          <div className="clockHand" id="hour" style={rotation((hour + Number(parts.minute) / 60) * 30)} />
-          {showSeconds && <div className="clockHand" id="second" style={rotation(Number(parts.second) * 6)} />}
+          <div className="clockHand clock-minute" style={rotation(Number(parts.minute) * 6)} />
+          <div className="clockHand clock-hour" style={rotation((hour + Number(parts.minute) / 60) * 30)} />
+          {showSeconds && <div className="clockHand clock-second" style={rotation(Number(parts.second) * 6)} />}
         </div>
         </>}
       </div>
-    </div>
   );
-};
+}
 
 export default AnalogClock;

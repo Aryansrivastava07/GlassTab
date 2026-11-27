@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 
+export const UPDATER_URL = 'https://aryansrivastava07.github.io/GlassTab/update/';
 const UPDATE_URL = 'https://aryansrivastava07.github.io/GlassTab/update.json';
 const BUILD_ID = import.meta.env.VITE_BUILD_ID;
 

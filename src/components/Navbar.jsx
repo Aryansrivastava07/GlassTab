@@ -16,7 +16,7 @@ import {
   Download,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import useExtensionUpdate from '../hooks/useExtensionUpdate';
+import useExtensionUpdate, { UPDATER_URL } from '../hooks/useExtensionUpdate';
 const Sidebar = lazy(() => import('./Sidebar'));
 
 const NAV_CATEGORIES = [
@@ -98,7 +98,7 @@ const Navbar = ({
           <div className="flex items-center gap-1.5">
             {update && (
               <a
-                href="https://aryansrivastava07.github.io/GlassTab/update/"
+                href={UPDATER_URL}
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label="GlassTab update available; open updater"

@@ -50,15 +50,15 @@
   background: #f5f4ec !important;
   border: 2px solid #596164;
 }
-.face-station #hour { width: calc(var(--clock-size) * .045); }
-.face-station #minute { width: calc(var(--clock-size) * .032); }
+.face-station .clock-hour { width: calc(var(--clock-size) * .045); }
+.face-station .clock-minute { width: calc(var(--clock-size) * .032); }
 .clock.face-roman {
   color: #f5d99d;
   --clock-hand-color: #f8e8c8 !important;
   background: radial-gradient(circle, #314142, #101e22) !important;
   border: 2px solid #b69a65;
 }
-.face-roman #second, .face-roman #second::before, .face-roman #hour::after { background: #cb9665; }
+.face-roman .clock-second, .face-roman .clock-second::before, .face-roman .clock-hour::after { background: #cb9665; }
 .analog-date {
   position: absolute; top: 60%; left: 50%; transform: translateX(-50%);
   color: var(--clock-hand-color); font: 600 calc(var(--clock-size) * .085)/1.2 system-ui;
@@ -147,7 +147,7 @@ html.high-contrast .clock {
   transform-origin: 0 0;
   border-radius: 10px;
 }
-#second {
+.clock-second {
   width: calc(var(--clock-diameter) / 200);
   height: calc(var(--clock-diameter) / 2.1);
   background-color: rgb(255, 0, 0);
@@ -164,7 +164,7 @@ html.high-contrast .clock {
   }
 }
 
-#hour::after {
+.clock-hour::after {
   content: "";
   position: absolute;
   width: calc(var(--clock-diameter) / 20);
@@ -175,7 +175,7 @@ html.high-contrast .clock {
   border-radius: 50vh;
   color: aliceblue;
 }
-#second::before {
+.clock-second::before {
   content: "";
   position: absolute;
   width: calc(var(--clock-diameter) / 50);
@@ -185,7 +185,7 @@ html.high-contrast .clock {
   background-color: red;
   border-radius: 50vh;
 }
-#minute {
+.clock-minute {
   width: calc(var(--clock-diameter) / 60);
   height: calc(var(--clock-diameter) / 2.5);
   background-color: var(--clock-hand-color, rgb(255, 252, 252));
@@ -193,7 +193,7 @@ html.high-contrast .clock {
   --mn-deg-start: 180deg;
   --mn-deg-end: 540deg;
 }
-#second::after {
+.clock-second::after {
   content: "";
   position: absolute;
   width: calc(var(--clock-diameter) / 100);
@@ -212,7 +212,7 @@ html.high-contrast .clock {
     rotate: var(--mn-deg-end);
   }
 }
-#hour {
+.clock-hour {
   width: calc(var(--clock-diameter) / 40);
   height: calc(var(--clock-diameter) / 4);
   background-color: var(--clock-hand-color, rgb(255, 252, 252));

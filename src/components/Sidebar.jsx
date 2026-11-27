@@ -36,6 +36,7 @@ import { getUrlSuggestionsForName } from '../utils/urlSuggestionService';
 import UrlSuggestions from './UrlSuggestions';
 import GlassThemeControls from './GlassThemeControls';
 import AccessibilitySettings from './AccessibilitySettings';
+import { UPDATER_URL } from '../hooks/useExtensionUpdate';
 import ClockSettings from './ClockSettings';
 
 const formatSyncTimestamp = (iso) => {
@@ -1379,6 +1380,13 @@ const Sidebar = ({
           {/* TAB 4: ACCOUNT, MEDIA & SYNC */}
           {normalizedTab === 'account' && (
             <div className="space-y-4">
+              <section className="p-4 bg-white/5 border border-white/10 rounded-xl space-y-3">
+                <h4 className="text-sm font-semibold">Extension updates</h4>
+                <p className="text-xs text-gray-400">Choose your installed GlassTab folder in the updater, then reload GlassTab from the Extensions page.</p>
+                <a href={UPDATER_URL} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 rounded-lg bg-sky-500/15 border border-sky-400/30 px-3 py-2 text-xs font-semibold text-sky-200 hover:bg-sky-500/25">
+                  <CloudDownload size={15} /> Update to latest version
+                </a>
+              </section>
               <div className="p-4 bg-white/5 border border-white/10 rounded-xl space-y-3">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center">

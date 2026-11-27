@@ -41,7 +41,7 @@
 
 ### Updating an unpacked installation
 
-After GitHub Pages is enabled for this repository (Settings → Pages → Source: GitHub Actions), each push to `main` builds and publishes the latest extension files. Open the [GlassTab updater](https://aryansrivastava07.github.io/GlassTab/update/) in Chrome or Edge, select the **exact folder** shown for GlassTab under `chrome://extensions` → Details, and then click Reload on the extension card. The updater checks the downloaded files before writing and leaves browser-stored notes and settings alone. New builds also show an Update button in the extension. Existing installations need one manual visit to the updater to get that button.
+After GitHub Pages is enabled for this repository (Settings → Pages → Source: GitHub Actions), each push to `main` builds and publishes the latest extension files. Open the [GlassTab updater](https://aryansrivastava07.github.io/GlassTab/update/) in Chrome or Edge, select the **exact folder** shown for GlassTab under `chrome://extensions` → Details, and then click Reload on the extension card. The updater checks the downloaded files before writing and leaves browser-stored notes and settings alone. In the extension, open **Settings > Sync > Update to latest version** to start the same updater. Existing installations need one manual visit to the updater to get that button.
 
 The website cannot discover or modify the installed folder without the user's folder selection and write permission. If GitHub Pages has not been enabled, the updater URL will not be available yet.
 

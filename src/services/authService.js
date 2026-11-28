@@ -1,5 +1,6 @@
 import {
     signOut,
+    signInWithPopup,
     signInWithEmailAndPassword,
     createUserWithEmailAndPassword,
     updateProfile,
@@ -50,6 +51,10 @@ export const getOAuthRedirectURL = () => {
  * 4. Save
  */
 export const signInWithGoogle = async () => {
+    if (!globalThis.chrome?.identity?.launchWebAuthFlow) {
+        const result = await signInWithPopup(auth, new GoogleAuthProvider());
+        return result.user;
+    }
     // OAuth 2.0 Web Client ID in Google Cloud Console
     const CLIENT_ID = '69395256863-2bpuunju7jb9s030nng7dn069lj2edso.apps.googleusercontent.com';
 

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { auth } from '../firebase';
-import { onAuthStateChanged } from 'firebase/auth';
+import { onIdTokenChanged } from 'firebase/auth';
 import { fetchAndRestoreGeminiKeyFromCloud } from '../services/secureKeyService';
 
 const AuthContext = createContext();
@@ -62,11 +62,19 @@ export const AuthProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(() => readCachedAuthUser());
   const [loading, setLoading] = useState(false);
 
+  const [googleUser, setGoogleUser] = useState(null);
+
   useEffect(() => {
+    let generation = 0;
     let isMounted = true;
     try {
-      const unsubscribe = onAuthStateChanged(auth, (user) => {
+      const unsubscribe = onIdTokenChanged(auth, (user) => {
         if (!isMounted) return;
+        const version = ++generation;
+        setGoogleUser(previous => previous === user ? previous : null);
+        if (user) user.getIdTokenResult().then(result => {
+          if (isMounted && generation === version) setGoogleUser(result.signInProvider === 'google.com' ? user : null);
+        }).catch(() => { if (isMounted && generation === version) setGoogleUser(null); });
         setCurrentUser(user);
         writeCachedAuthUser(user);
         if (user?.uid && user.uid !== 'local_guest') {
@@ -88,6 +96,7 @@ export const AuthProvider = ({ children }) => {
 
   const value = {
     currentUser: currentUser || GUEST_USER,
+    googleUser,
     firebaseUser: currentUser,
     isGuest: !currentUser,
     loading

@@ -1,4 +1,5 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
+import OceanWallpaper from './OceanWallpaper';
 import localWallpaper from '../assets/wallpaper-default.webp';
 
 const key = 'glasstab_daily_wallpaper';
@@ -59,16 +60,10 @@ export function useLocalDay() {
 export function DailyWallpaper({ mode, still }) {
   const day = useLocalDay();
   const [name, photo] = landscapes[day % landscapes.length];
-  const [visible, setVisible] = useState(!document.hidden);
-  useEffect(() => {
-    const change = () => setVisible(!document.hidden);
-    document.addEventListener('visibilitychange', change);
-    return () => document.removeEventListener('visibilitychange', change);
-  }, []);
+  if (mode === 'motion') return <OceanWallpaper day={day} still={still} />;
   return <div className="wallpaper-container daily-landscape" aria-hidden="true" data-scene={name}
-    data-motion={mode === 'motion' && !still} style={{ backgroundImage: 'url(' + localWallpaper + ')', '--play': visible ? 'running' : 'paused' }}>
+    data-motion="false" style={{ backgroundImage: 'url(' + localWallpaper + ')' }}>
     <img key={photo} alt="" src={'https://images.unsplash.com/photo-' + photo + '?auto=format&fit=crop&w=1920&q=80'}
       onError={event => { event.currentTarget.hidden = true; }} />
-    {mode === 'motion' && !still && <div className="landscape-light" style={{ '--hue': (day * 47) % 360 }} />}
   </div>;
 }

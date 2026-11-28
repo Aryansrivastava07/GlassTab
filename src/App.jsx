@@ -616,7 +616,7 @@ function AppContent() {
       aria-label="AI Studio"
       aria-hidden={activeView !== 'ai-studio'}
       tabIndex={-1}
-      className={`fixed inset-0 z-50 flex items-center justify-center p-3 pb-16 sm:p-6 sm:pb-16 ${
+      className={`fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 ${
         activeView === 'ai-studio' ? 'pointer-events-auto' : 'pointer-events-none'
       }`}
       style={{
@@ -664,7 +664,7 @@ function AppContent() {
     )}
 
     {/* ================= PERMANENT BOTTOM CAPSULE TOGGLE (DASHBOARD <-> AI STUDIO) ================= */}
-    {!features.standbyMode && features.aiStudio && (
+    {!features.standbyMode && features.aiStudio && activeView !== 'ai-studio' && (
       <button
         type="button"
         onClick={() => transitionTo(activeView === 'ai-studio' ? 'dashboard' : 'ai-studio')}

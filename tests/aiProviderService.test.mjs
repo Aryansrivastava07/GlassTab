@@ -5,7 +5,8 @@ import { readFile } from 'node:fs/promises';
 // Load the browser module with its key dependency mocked; no network or real keys are used.
 const source = (await readFile(new URL('../src/services/aiProviderService.js', import.meta.url), 'utf8'))
   .replace(/^import \{ getGeminiApiKey \} from '.\/aiWidgetService';/, 'const getGeminiApiKey = () => globalThis.mockGeminiKey;');
-const service = await import(`data:text/javascript,${encodeURIComponent(source)}`);
+const guardedSource = source.replace("import { recordAiUsage } from './aiAccess';", 'const recordAiUsage = async feature => globalThis.usageGuard?.(feature);');
+const service = await import(`data:text/javascript,${encodeURIComponent(guardedSource)}`);
 
 const saved = new Map();
 globalThis.localStorage = {
@@ -89,4 +90,49 @@ test('Groq GPT-OSS 120B retries once when reasoning consumes the voice reply', a
   assert.equal(reply.text, 'Here is your answer.');
   assert.deepEqual(bodies.map((body) => body.max_completion_tokens), [768, 1024]);
   assert.ok(bodies.every((body) => body.reasoning_effort === 'low'));
+});
+
+test('image creation uses the dedicated model and returns downloadable bytes without search', async () => {
+  globalThis.fetch = async (url, options) => {
+    assert.ok(url.includes(service.IMAGE_MODEL));
+    const body = JSON.parse(options.body);
+    assert.equal(body.tools, undefined);
+    assert.equal(body.contents.length, 1);
+    assert.deepEqual(body.generationConfig.responseModalities, ['TEXT', 'IMAGE']);
+    assert.equal(body.contents[0].parts[1].inlineData.data, 'AQI=');
+    return Response.json({ candidates: [{ content: { parts: [
+      { text: 'private', thought: true }, { inlineData: { mimeType: 'image/png', data: 'AQI=' } },
+    ] } }] });
+  };
+  const response = await service.sendAiMessage({ userMessage: 'Draw it', useWebSearch: true, createImage: true,
+    files: [new File([new Uint8Array([1, 2])], 'reference.png', { type: 'image/png' })] });
+  assert.equal(response.text, '');
+  assert.deepEqual([...new Uint8Array(await response.image.arrayBuffer())], [1, 2]);
+});
+
+test('Groq vision uses an image input model and includes attached text', async () => {
+  globalThis.fetch = async (_, options) => {
+    const body = JSON.parse(options.body);
+    assert.equal(body.model, service.GROQ_VISION);
+    assert.match(body.messages.at(-1).content[0].text, /sample/);
+    assert.match(body.messages.at(-1).content[1].image_url.url, /^data:image\/png;base64,/);
+    return Response.json({ choices: [{ message: { content: 'Description' } }] });
+  };
+  await service.sendAiMessage({ provider: 'groqcloud', userMessage: 'Describe', files: [
+    new File(['sample'], 'context.txt'), new File(['abc'], 'photo.png', { type: 'image/png' }),
+  ] });
+});
+
+test('unsupported image generation and uploads stop before sending', async () => {
+  globalThis.fetch = () => assert.fail('Unexpected provider call');
+  await assert.rejects(service.sendAiMessage({ provider: 'groqcloud', userMessage: 'Draw', createImage: true }), /no image generation API/);
+  await assert.rejects(service.sendAiMessage({ userMessage: 'Read', files: [new File(['x'], 'unknown.exe')] }), /unsupported/);
+  assert.throws(() => service.validateFiles(Array(4).fill({ size: 1 }), 'gemini', false), /three files/);
+});
+
+test('a denied usage check stops the provider request', async () => {
+  globalThis.fetch = () => assert.fail('Provider contacted before login');
+  globalThis.usageGuard = () => { throw new Error('Sign in with Google'); };
+  try { await assert.rejects(service.sendAiMessage({ userMessage: 'Hi' }), /Sign in with Google/); }
+  finally { delete globalThis.usageGuard; }
 });

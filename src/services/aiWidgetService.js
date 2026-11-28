@@ -1,3 +1,4 @@
+import { recordAiUsage } from './aiAccess';
 // AI Prompt Builder, Query Validator & Confirmed Live Data Connectors for Custom Widgets
 import {
   getLocalGeminiApiKey,
@@ -988,6 +989,7 @@ export const generateWidgetWithGemini = async ({
     height,
   });
 
+  await recordAiUsage('widget');
   const candidateModels = [
     'gemini-3.5-flash-lite',
     'gemini-3.8-flash',

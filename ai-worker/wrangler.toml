@@ -1,0 +1,17 @@
+name = "glasstab-ai"
+main = "worker.js"
+compatibility_date = "2026-01-01"
+
+[ai]
+binding = "AI"
+
+[vars]
+FIREBASE_PROJECT_ID = "landing-page-efde6"
+FIREBASE_WEB_API_KEY = "AIzaSyDXSMsFqKh2N-TXWRrAX7C434a1Jootx7o"
+DAILY_IMAGE_LIMIT = "3"
+DAILY_TEXT_LIMIT = "10"
+
+[[d1_databases]]
+binding = "USAGE"
+database_name = "glasstab-ai-usage"
+database_id = "3a925201-d38e-4d3a-968e-93f92c7ca3e2"

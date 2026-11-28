@@ -70,7 +70,7 @@ const CustomWidgetStudio = ({
 }) => {
   const dialogRef = useRef(null);
   useDialogFocus(dialogRef, isOpen, onClose);
-  const { firebaseUser, isGuest } = useAuth();
+  const { firebaseUser, isGuest, googleUser } = useAuth();
   const googleAuthed = !isGuest && isGoogleSignedIn(firebaseUser);
 
   // Store is the default page when opening Layers; editing a widget opens Dev Mode directly
@@ -248,6 +248,7 @@ const CustomWidgetStudio = ({
   };
 
   const handleGenerateAI = async () => {
+    if (!googleUser) { await handleGoogleSignIn(); return; }
     const check = validatePromptCapabilities(sourceId, description);
     if (!check.ok) {
       showToast('error', 'Cannot Be Done With This API', check.error);
@@ -346,7 +347,7 @@ const CustomWidgetStudio = ({
     setIsSigningIn(true);
     try {
       await signInWithGoogle();
-      showToast('success', 'Signed in with Google', 'You can now publish your widget to the Store.');
+      showToast('success', 'Signed in with Google', 'You can now generate and publish widgets.');
     } catch (err) {
       showToast('error', 'Google Sign-In Failed', err?.message || 'Sign-in was cancelled.');
     } finally {
@@ -936,7 +937,7 @@ const CustomWidgetStudio = ({
                       className="py-2 px-3 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-60 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 shadow transition cursor-pointer"
                     >
                       <Sparkles size={13} />
-                      <span>{isGenerating ? 'Generating...' : 'Generate with AI'}</span>
+                      <span>{isGenerating ? 'Generating...' : googleUser ? 'Generate with AI' : 'Sign in with Google to generate'}</span>
                     </button>
                   </div>
                 </div>

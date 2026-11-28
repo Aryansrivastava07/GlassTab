@@ -102,12 +102,33 @@ try {
   console.log('Loading the production dashboard.');
   await waitFor(() => Boolean(document.querySelector('#searchInput')));
   await waitFor(() => !!document.querySelector('[aria-label="GlassTab quick start"]'));
+  const checkEntry = async (name, width, height) => {
+    await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
+    assert(await evaluate(() => {
+      const panel = document.querySelector('.entry-panel');
+      const rect = panel.getBoundingClientRect();
+      return rect.left >= 0 && rect.right <= innerWidth && rect.top >= 0 && rect.bottom <= innerHeight &&
+        panel.scrollWidth <= panel.clientWidth + 1;
+    }), name + ' must fit the viewport');
+    await screenshot(name);
+  };
+  await checkEntry('setup-mobile', 320, 720);
+  await checkEntry('setup-desktop', 1440, 900);
   const clickText = async text => send('Runtime.evaluate', {
     expression: `[...document.querySelectorAll('button')].find(b => b.textContent.trim() === ${JSON.stringify(text)}).click()`,
   });
   await clickText('Continue');
   await clickText('Daily motion');
   await waitFor(() => !!document.querySelector('.daily-landscape[data-motion="true"]'));
+  const movingFrame = await evaluate(() => document.querySelector('.daily-landscape canvas').toDataURL());
+  await new Promise(resolve => setTimeout(resolve, 240));
+  assert(movingFrame !== await evaluate(() => document.querySelector('.daily-landscape canvas').toDataURL()), 'Ocean surface must change between frames');
+  await send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
+  await waitFor(() => !!document.querySelector('.daily-landscape[data-motion="false"] canvas'));
+  const stillFrame = await evaluate(() => document.querySelector('.daily-landscape canvas').toDataURL());
+  await new Promise(resolve => setTimeout(resolve, 240));
+  assert(stillFrame === await evaluate(() => document.querySelector('.daily-landscape canvas').toDataURL()), 'Reduced motion must keep the ocean still');
+  await send('Emulation.setEmulatedMedia', { features: [] });
   await clickText('Continue');
   await evaluate(() => document.querySelector('[aria-label="Today\'s focus"]').focus());
   await send('Input.insertText', { text: 'Finish the prototype' });
@@ -224,54 +245,11 @@ try {
   await waitFor(() => !document.querySelector('[aria-label="Notes and vault"]'));
   await evaluate(() => document.querySelector('[title="Open AI Studio (Ginnie & Companions)"]').click());
   await waitFor(() => document.querySelector('#ai-studio-overlay')?.getAttribute('role') === 'dialog');
-  await waitFor(() => !!document.querySelector('[aria-label="Talk to Gemini Live"]:not(:disabled)'));
-  assert(await evaluate(() => {
-    const composer = document.querySelector('#ai-studio-overlay textarea');
-    composer.focus();
-    const field = composer.closest('.compound-field');
-    return getComputedStyle(composer).outlineStyle === 'none' &&
-      getComputedStyle(field).outlineStyle === 'solid' &&
-      field.scrollWidth <= field.clientWidth + 1;
-  }), 'Chat composer focus and controls must fit the field at 320px');
-  await evaluate(() => document.querySelector('[aria-label="Talk to Gemini Live"]').click());
-  await waitFor(() => !!document.querySelector('[aria-label="Gemini voice API key"] input'));
-  await evaluate(() => document.querySelector('[aria-label="Gemini voice API key"] input').focus());
-  await send('Input.insertText', { text: 'test-only-voice-key' });
-  await evaluate(() => [...document.querySelectorAll('button')].find(button => button.textContent === 'Save key').click());
-  await waitFor(() => localStorage.getItem('glasstab_gemini_live_key') === 'test-only-voice-key');
-  await evaluate(() => {
-    const NativeSocket = window.WebSocket;
-    window.WebSocket = class extends NativeSocket {
-      constructor(url, protocols) {
-        if (!url.startsWith('wss://generativelanguage.googleapis.com/')) return new NativeSocket(url, protocols);
-        const fake = {
-          readyState: 1, bufferedAmount: 0,
-          close() { window.voiceSocketClosed = true; },
-          send(raw) {
-            const frame = JSON.parse(raw);
-            if (frame.setup) {
-              if (frame.setup.generationConfig.responseModalities[0] !== 'AUDIO') throw Error('Missing audio modality');
-              fake.onmessage({ data: '{"setupComplete":{}}' });
-            } else if (!window.sentMicrophone && frame.realtimeInput?.audio?.data) {
-              window.sentMicrophone = true;
-              const content = {
-                inputTranscription: { text: 'Browser microphone test' }, outputTranscription: { text: 'Voice reply test' },
-                modelTurn: { parts: [{ inlineData: { mimeType: 'audio/pcm;rate=24000', data: btoa('\0'.repeat(4800)) } }] },
-                turnComplete: true,
-              };
-              fake.onmessage({ data: JSON.stringify({ serverContent: content }) });
-            }
-          },
-        };
-        setTimeout(() => fake.onopen(), 0);
-        return fake;
-      }
-    };
-    document.querySelector('[aria-label="Talk to Gemini Live"]').click();
-  });
-  await waitFor(() => window.sentMicrophone && document.body.innerText.includes('Voice reply test'));
-  await evaluate(() => document.querySelector('[aria-label="End Gemini Live call"]').click());
-  await waitFor(() => window.voiceSocketClosed && !!document.querySelector('[aria-label="Talk to Gemini Live"]'));
+  await waitFor(() => document.querySelector('#ai-studio-overlay')?.innerText.includes('Sign in to use GlassTab AI'));
+  assert(await evaluate(() => !document.querySelector('#ai-studio-overlay textarea, [aria-label="Composer tools"]')),
+    'Guest must see the Google gate before accessing chat, files, images or voice');
+  await checkEntry('sign-in-desktop', 1440, 900);
+  await checkEntry('sign-in-mobile', 320, 720);
   await key('Escape');
   await waitFor(() => document.querySelector('#ai-studio-overlay')?.getAttribute('aria-hidden') === 'true');
   // Test keyboard layout editing with the standard desktop arrangement.

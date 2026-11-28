@@ -30,7 +30,7 @@
 The skippable quick start lets you organize shortcuts, choose a wallpaper, and set today's focus. Reopen it any time from **Settings > Sync > Dashboard quick start**.
 
 - **Speed Dial folders.** Drag one shortcut onto another, name the folder, and confirm. For keyboard and touch, choose **Organize**, select shortcuts and enter a folder name. Leave the name blank to return them to the main dock.
-- **Daily wallpaper.** Under **Settings > Wallpaper**, choose **Daily photo** or **Daily motion**. Seven curated Unsplash landscapes rotate at local midnight. Motion adds a slow pan and drifting light. Lite mode and reduced motion show a still image. **My wallpaper** restores your personal background.
+- **Daily wallpaper.** Under **Settings > Wallpaper**, choose **Daily photo** or **Daily motion**. Daily photo rotates through seven Unsplash landscapes at local midnight. Daily motion renders ocean swells and moving reflections offline, rotating through seven skies and coastlines. Lite mode and reduced motion show a still frame. **My wallpaper** restores your personal background.
 - **Today's focus.** Save one priority from quick start or **Quick Notes & Todos > Todos**. It appears on the desktop notes button and resets for the next local day.
 - **World clock.** Select the digital face in **Settings > Widgets > Clock** to compare a second time zone.
 
@@ -69,6 +69,18 @@ Want to start using GlassTab right away? No Node.js, Git, or build tools are req
 
 ## ✨ Key Features
 
+### Google sign-in and AI usage setup
+
+GlassTab requires Google sign-in for chat, web search, attachments, Gemini Live, AI widget generation and image generation. The free **Tools > Create image (free)** action uses a Cloudflare Worker with FLUX.1 Schnell. It accepts text prompts and works independently of the chat provider and chat API key. The Gemini image option remains available for paid generation with reference images.
+
+1. Enable **Google** under Firebase Authentication > Sign-in method for the Firebase project used by GlassTab. For the hosted web app, add its hostname under Authorized domains. Add `localhost` when testing on localhost. The unpacked extension uses the existing Chrome identity OAuth redirect.
+2. From the repository root, run `cd ai-worker`, `npx wrangler@4 login`, then `npx wrangler@4 d1 create glasstab-ai-usage`. Copy the returned database ID into `wrangler.toml` as `database_id = "your-id"` under `[[d1_databases]]`. Confirm the Firebase project and web API key match the app. The Worker uses the public Firebase web key for Google token verification.
+3. Run `npx wrangler@4 d1 execute glasstab-ai-usage --remote --file=schema.sql`, then `npx wrangler@4 deploy`. Copy the HTTPS Worker URL. A single deployed Worker can serve both local and production clients.
+4. In the repository root, set `VITE_AI_WORKER_URL=https://your-worker.workers.dev` in `.env.local`. Restart Vite for local web testing or run `npm run build` and reload the unpacked extension. For updater releases, set the same GitHub Actions repository variable before publishing. AI requests require a reachable usage service.
+5. If you use the optional shared Firebase voice function, set `AI_WORKER_URL` in its deployment environment to the same Worker URL and redeploy the function. Personal-key voice, chat and Cloudflare images work without Firebase Functions.
+
+Open **Cloudflare Dashboard > D1 > glasstab-ai-usage > Console** and run `SELECT uid, day, feature, attempts FROM ai_usage ORDER BY day DESC;` to inspect daily actions. Each row counts request attempts for one Firebase user and feature on a UTC day. A voice session counts once. Provider retries belong to the same action. D1 stores aggregate counts without prompts, files or keys. The default free image limit is three images per user per UTC day. Failed image attempts are counted separately and restore a slot. Change `DAILY_IMAGE_LIMIT` in the Worker configuration to adjust it. The Cloudflare account's shared allowance also applies. [Cloudflare Workers AI pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/)
+
 ### ⚡ Smart Omnibar & Fast Search
 - **Instant Search:** Switch effortlessly between Google, DuckDuckGo, and Bing with automatic query persistence.
 - **Real-Time Autocomplete:** Quick URL suggestions and top-destination matching as you type.
@@ -94,7 +106,7 @@ Want to start using GlassTab right away? No Node.js, Git, or build tools are req
 #### Set up voice chat
 
 1. Open [Google AI Studio API Keys](https://aistudio.google.com/apikey). Choose a project and create a Gemini API key. If your existing project is missing, import it under **Dashboard > Projects**. Check your project's Live model access and quota in AI Studio.
-2. For a local test, load the unpacked `dist` folder, open the AI Studio popup and choose **Companion menu > Gemini voice API key**. Paste the key and save. Select **Talk**, allow microphone access, speak, and select **End** to disconnect. A voice key stays on this device. A previously configured Gemini chat key also works.
+2. For a local test, load the unpacked `dist` folder, open the AI Studio popup, sign in with Google and choose **Companion menu > Gemini voice API key**. Paste the key and save. Select **Tools > Talk**, allow microphone access, speak, and select **End** to disconnect. A voice key stays on this device. A previously configured Gemini chat key also works.
 3. For shared production access, use the Firebase project configured in `src/firebase.js` (currently `landing-page-efde6`). With a Firebase CLI account that can deploy Functions, run the commands below from the repository root. Enter the shared Gemini key at the secret prompt. Deploying Cloud Functions requires a billing-enabled Firebase project.
 
    ```sh
@@ -103,7 +115,7 @@ Want to start using GlassTab right away? No Node.js, Git, or build tools are req
    firebase deploy --only functions:geminiLiveToken --project landing-page-efde6
    ```
 
-   Signed-in users without a personal Gemini key can then select **Talk** immediately. The function issues a single-use, model-restricted token; only the token reaches the client. Guests can supply a personal voice key. Replacing or removing the voice key leaves the text provider settings intact. Test shared access in a signed-in browser with neither a voice key nor a Gemini chat key saved.
+   Signed-in users without a personal Gemini key can then select **Talk** immediately. The function issues a single-use, model-restricted token; only the token reaches the client. Replacing or removing the voice key leaves the text provider settings intact. Test shared access in a signed-in browser with neither a voice key nor a Gemini chat key saved.
 
 
 ### 🖼️ 0ms Progressive Blur-Up Wallpapers

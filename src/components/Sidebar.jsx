@@ -661,7 +661,7 @@ const Sidebar = ({
               <section className="rounded-xl border border-white/10 bg-white/5 p-4 space-y-3">
                 <h4 className="text-sm font-semibold">Wallpaper rotation</h4>
                 <WallpaperChoices />
-                <p className="text-xs text-slate-300">A different Unsplash landscape each day. Daily motion adds a slow pan and shifting light.</p>
+                <p className="text-xs text-slate-300">Daily photo rotates through landscapes. Daily motion brings rolling waves and moving reflections, with a new seascape each day.</p>
               </section>
               {/* Upload local image or video */}
               <div className="p-4 bg-white/5 border border-white/10 rounded-xl space-y-3">

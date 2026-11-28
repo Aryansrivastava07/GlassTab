@@ -1,4 +1,8 @@
+import './StudioEntry.css';
 ﻿import React, { useState, useEffect, useRef } from 'react';
+import { generateFreeImage, sendFreeText } from '../services/aiAccess';
+import { getBoundedHistory, imageModeNotice, validateFiles, GROQ_VISION } from '../services/aiProviderService';
+import { deleteLocalMedia, getLocalMedia, saveLocalMedia } from '../utils/localMediaDb';
 import useDialogFocus from '../hooks/useDialogFocus';
 import {
   Sparkles,
@@ -18,6 +22,8 @@ import {
   Wand2,
   Mic,
   MicOff,
+  Paperclip,
+  Image as ImageIcon,
   Edit2,
   ShieldCheck,
   Globe,
@@ -46,12 +52,36 @@ import {
 } from '../services/aiChatService';
 import { getGeminiApiKey, saveGeminiApiKey, maskApiKey, subscribeToCloudGeminiKey } from '../services/aiWidgetService';
 import { useAuth } from '../context/AuthContext';
-import { signInWithGoogle, signInWithEmail, registerWithEmail } from '../services/authService';
+import { signInWithGoogle } from '../services/authService';
 import { startGeminiLive, LIVE_MODEL } from '../services/geminiLive';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { app } from '../firebase';
 
 const voiceKeyStorage = 'glasstab_gemini_live_key';
+
+const temporaryImages = new Map();
+
+function GeneratedImage({ mediaKey, prompt }) {
+  const [url, setUrl] = useState('');
+  const [missing, setMissing] = useState(false);
+  useEffect(() => {
+    let active = true;
+    let objectUrl;
+    async function load() {
+      const blob = temporaryImages.get(mediaKey) || (await getLocalMedia(mediaKey))?.blob;
+      if (!active) return;
+      if (!blob) { setMissing(true); return; }
+      objectUrl = URL.createObjectURL(blob);
+      setUrl(objectUrl);
+    }
+    load();
+    return () => { active = false; if (objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, [mediaKey]);
+  if (!url) return <small>{missing ? 'Image unavailable on this device.' : 'Loading image...'}</small>;
+  return <a href={url} download="ginnie-image" className="block text-xs text-sky-300">
+    <img src={url} alt={prompt} className="mb-2 max-h-80 max-w-full rounded-xl object-contain" />Download image
+  </a>;
+}
 
 // Lightweight Zero-Dependency Markdown Formatter with Copyable Code Blocks
 const FormattedMessage = ({ text }) => {
@@ -188,13 +218,30 @@ const renderInlineFormatting = (text) => {
 };
 
 export const GlassAIStudio = ({ onScrollToDashboard, isActive = true }) => {
-  const { currentUser, isGuest } = useAuth();
-  const isSignedIn = !isGuest && Boolean(currentUser?.uid && currentUser.uid !== 'local_guest');
-  const effectiveUid = isSignedIn ? currentUser.uid : 'local_guest';
+  const { googleUser } = useAuth();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  if (googleUser) return <SignedInStudio key={googleUser.uid} effectiveUid={googleUser.uid} isActive={isActive} onScrollToDashboard={onScrollToDashboard} />;
+  return <section className="entry-panel" aria-labelledby="studio-login-heading">
+    <header className="entry-cover">
+      <div className="entry-brand"><Sparkles size={18}/>AI Studio</div>
+      <button className="entry-dismiss" aria-label="Back to dashboard" onClick={onScrollToDashboard}><X size={17}/></button>
+      <h2 id="studio-login-heading">Sign in to use GlassTab AI</h2>
+    </header>
+    <div className="entry-body">
+    <p className="mb-5 text-sm leading-relaxed text-slate-300">Use your Google account to start a conversation, talk to Ginnie, or create your first image. Free images have a daily limit per account.</p>
+    <button disabled={busy} className="entry-primary w-full" onClick={async () => {
+      setBusy(true); setError('');
+      try { await signInWithGoogle(); }
+      catch (err) { setError(err.code === 'auth/popup-closed-by-user' ? 'Sign-in window closed.' : 'Google sign-in failed. Please try again.'); }
+      finally { setBusy(false); }
+    }}>{busy ? 'Signing in...' : 'Sign in with Google'}</button>
+    {error && <p role="alert" className="mt-2 text-sm text-rose-300">{error}</p>}
+    </div>
+  </section>;
+};
 
-  const [isSigningIn, setIsSigningIn] = useState(false);
-  const [signInError, setSignInError] = useState('');
-
+function SignedInStudio({ effectiveUid, isActive, onScrollToDashboard }) {
   // --- STATE ---
   const [characters, setCharacters] = useState(() => getAllCharacters());
   const [activeCharacterId, setActiveCharacterId] = useState('ginnie'); // Ginnie as highlighted, Default available
@@ -217,12 +264,31 @@ export const GlassAIStudio = ({ onScrollToDashboard, isActive = true }) => {
   const provider = aiSettings.provider;
   const providerInfo = AI_PROVIDERS[provider];
   const activeModel = aiSettings.models[provider] || providerInfo.model;
+  const [showTools, setShowTools] = useState(false);
+  const [files, setFiles] = useState([]);
+  const [createImage, setCreateImage] = useState(false);
+  const [toolError, setToolError] = useState('');
+  const uploadRef = useRef(null);
+  const toolsRef = useRef(null);
+  useEffect(() => {
+    setFiles([]); setCreateImage(false); setToolError(''); setShowTools(false);
+  }, [provider, activeThreadId, isActive]);
+  useEffect(() => {
+    if (!showTools) return;
+    const dismiss = event => { if (!toolsRef.current?.contains(event.target)) setShowTools(false); };
+    document.addEventListener('pointerdown', dismiss);
+    document.addEventListener('focusin', dismiss);
+    return () => {
+      document.removeEventListener('pointerdown', dismiss);
+      document.removeEventListener('focusin', dismiss);
+    };
+  }, [showTools]);
   const [apiKeyInput, setApiKeyInput] = useState(() => getProviderApiKey(getAiSettings().provider));
   const [showKeyPassword, setShowKeyPassword] = useState(false);
   const [apiKeyNotice, setApiKeyNotice] = useState('');
   const [hasKey, setHasKey] = useState(() => Boolean(getProviderApiKey(getAiSettings().provider).trim()));
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
-  const isUnlocked = true;
+
 
   // Subscribe to real-time Cloud Firestore encrypted Gemini key
   useEffect(() => {
@@ -262,49 +328,6 @@ export const GlassAIStudio = ({ onScrollToDashboard, isActive = true }) => {
   const handleModelChange = (nextModel) => {
     const models = { ...aiSettings.models, [provider]: nextModel };
     setAiSettings(saveAiSettings({ models }));
-  };
-
-  const [showEmailAuth, setShowEmailAuth] = useState(false);
-  const [isRegistering, setIsRegistering] = useState(false);
-  const [emailInput, setEmailInput] = useState('');
-  const [passwordInput, setPasswordInput] = useState('');
-  const [isEmailSubmitting, setIsEmailSubmitting] = useState(false);
-
-  const handleGoogleSignIn = async () => {
-    setIsSigningIn(true);
-    setSignInError('');
-    try {
-      await signInWithGoogle();
-    } catch (err) {
-      if (err?.code === 'auth/popup-closed-by-user') {
-        setSignInError('Sign-in window was closed. Please try again or use Email.');
-      } else if (err?.code === 'auth/network-request-failed') {
-        setSignInError('Network connection issue. Please check your internet connection.');
-      } else {
-        setSignInError(err?.message || 'Unable to sign in with Google. Please try again or use Email.');
-      }
-    } finally {
-      setIsSigningIn(false);
-    }
-  };
-
-  const handleEmailAuthSubmit = async (e) => {
-    e.preventDefault();
-    setIsEmailSubmitting(true);
-    setSignInError('');
-    try {
-      if (isRegistering) {
-        await registerWithEmail(emailInput, passwordInput);
-      } else {
-        await signInWithEmail(emailInput, passwordInput);
-      }
-      setEmailInput('');
-      setPasswordInput('');
-    } catch (err) {
-      setSignInError(err?.message || 'Authentication failed. Please check your credentials.');
-    } finally {
-      setIsEmailSubmitting(false);
-    }
   };
 
   // Custom Character Form State
@@ -386,6 +409,9 @@ export const GlassAIStudio = ({ onScrollToDashboard, isActive = true }) => {
   const handleDeleteThread = (threadId, e) => {
     e.stopPropagation();
     if (activeThreadId === threadId && voiceModeRef.current) stopVoiceConversation();
+    for (const msg of threads.find(thread => thread.id === threadId)?.messages || []) {
+      if (msg.mediaKey) { temporaryImages.delete(msg.mediaKey); void deleteLocalMedia(msg.mediaKey); }
+    }
     const updated = deleteChatThread(threadId);
     setThreads(updated);
     if (activeThreadId === threadId) {
@@ -439,7 +465,7 @@ export const GlassAIStudio = ({ onScrollToDashboard, isActive = true }) => {
     if (provider === 'gemini') await saveGeminiApiKey(apiKeyInput.trim(), effectiveUid);
     else saveProviderApiKey(provider, apiKeyInput.trim());
     setHasKey(Boolean(apiKeyInput.trim()));
-    setApiKeyNotice(provider === 'gemini' && isSignedIn ? 'Gemini key saved and cloud synced.' : 'API key saved in this browser.');
+    setApiKeyNotice(provider === 'gemini' ? 'Gemini key saved and cloud synced.' : 'API key saved in this browser.');
     setTimeout(() => {
       setShowApiKeyModal(false);
       setApiKeyNotice('');
@@ -478,22 +504,31 @@ export const GlassAIStudio = ({ onScrollToDashboard, isActive = true }) => {
   useEffect(() => { setVoiceStage(''); }, [effectiveUid]);
 
   const handleSendMessage = async (customPrompt = null) => {
-    if (!hasKey) {
-      setShowApiKeyModal(true);
-      return;
-    }
-
     const textToSend = (customPrompt || inputMessage).trim();
     if (!textToSend || isGeneratingRef.current) return;
 
     if (voiceModeRef.current) stopVoiceConversation();
-    if (!customPrompt) setInputMessage('');
+    const attachments = customPrompt ? [] : files;
+    const freeImage = !customPrompt && createImage === 'free';
+    const generate = !customPrompt && createImage === 'paid';
+    const freeText = !hasKey && !freeImage && !generate && !attachments.length && !useWebSearch;
+    if (!hasKey && !freeImage && !freeText) { setShowApiKeyModal(true); return; }
+    if (freeText && textToSend.length > 4000) { setToolError('Free chat accepts up to 4,000 characters per message.'); return; }
+    if (freeImage && (attachments.length || textToSend.length > 2048)) {
+      setToolError('Free image generation accepts a text prompt up to 2,048 characters. Remove any attachments.'); return;
+    }
+    try { validateFiles(attachments, provider, generate); }
+    catch (error) { setToolError(error.message); return; }
+    if (!customPrompt) {
+      setInputMessage(''); setFiles([]); setCreateImage(false); setToolError(''); setShowTools(false);
+    }
 
     // Append user message immediately
     const userMsg = {
       id: `msg_${Date.now()}`,
       role: 'user',
       text: textToSend,
+      filenames: attachments.map(file => file.name),
       timestamp: new Date().toISOString(),
     };
 
@@ -509,7 +544,7 @@ export const GlassAIStudio = ({ onScrollToDashboard, isActive = true }) => {
     // If first message, auto-title the thread
     const newTitle = targetThread.messages.length === 0 ? textToSend.substring(0, 32) : targetThread.title;
 
-    const updatedThreads = threads.map((t) =>
+    const updatedThreads = getChatThreads().map((t) =>
       t.id === targetThread.id
         ? {
             ...t,
@@ -527,30 +562,41 @@ export const GlassAIStudio = ({ onScrollToDashboard, isActive = true }) => {
     setIsGenerating(true);
 
     try {
-      const reply = await sendAiMessage({
+      const reply = freeImage ? await generateFreeImage(textToSend)
+        : freeText ? await sendFreeText(textToSend, getBoundedHistory(targetThread.messages), activeCharacter.systemPrompt)
+        : await sendAiMessage({
         provider,
         model: activeModel,
         character: activeCharacter,
         userMessage: textToSend,
         history: updatedMessages.slice(0, -1),
-        useWebSearch,
+        useWebSearch, files: attachments, createImage: generate,
       });
 
+      let mediaKey;
+      if (reply.image && getChatThreads().some(t => t.id === targetThread.id)) {
+        mediaKey = `ginnie-image-${crypto.randomUUID()}`;
+        if (!await saveLocalMedia(mediaKey, reply.image)) {
+          temporaryImages.set(mediaKey, reply.image);
+          reply.text += ' Download this image before closing this tab. Local storage is full or unavailable.';
+        }
+      }
       const aiMsg = {
         id: `msg_${Date.now()}_ai`,
         role: 'model',
         text: reply.text,
+        mediaKey, imagePrompt: mediaKey ? textToSend : undefined,
         modelUsed: reply.modelUsed,
         usage: reply.usage,
         groundingChunks: reply.groundingChunks,
         timestamp: new Date().toISOString(),
       };
 
-      const finalThreads = updatedThreads.map((t) =>
+      const finalThreads = getChatThreads().map((t) =>
         t.id === targetThread.id
           ? {
               ...t,
-              messages: [...updatedMessages, aiMsg],
+              messages: [...t.messages, aiMsg],
               updatedAt: new Date().toISOString(),
             }
           : t
@@ -567,14 +613,15 @@ export const GlassAIStudio = ({ onScrollToDashboard, isActive = true }) => {
           id: `msg_${Date.now()}_err`,
           role: 'model',
           text: `⚠️ **Error:** ${err.message || 'Unable to connect to the AI provider. Please check your network or API key.'}`,
+          freeImagePrompt: freeImage ? textToSend : undefined,
           isError: true,
           keyIssue: /api key|invalid key|credits|billing|permission/i.test(err.message || ''),
           timestamp: new Date().toISOString(),
         };
 
-        const finalThreads = updatedThreads.map((t) =>
+        const finalThreads = getChatThreads().map((t) =>
           t.id === targetThread.id
-            ? { ...t, messages: [...updatedMessages, errorMsg] }
+            ? { ...t, messages: [...t.messages, errorMsg] }
             : t
         );
         setThreads(finalThreads);
@@ -590,17 +637,13 @@ export const GlassAIStudio = ({ onScrollToDashboard, isActive = true }) => {
     if (voiceModeRef.current) return stopVoiceConversation();
     if (isGeneratingRef.current || !activeThread) return;
     const key = localStorage.getItem(voiceKeyStorage) || getGeminiApiKey();
-    if (!key && !isSignedIn) {
-      setVoiceError('Sign in to use GlassTab voice, or add your own Gemini key.');
-      openVoiceKey();
-      return;
-    }
     const controller = new AbortController();
     voiceModeRef.current = controller;
     setVoiceError('');
     setVoiceStage('Connecting');
     try {
       await startGeminiLive({
+        shared: !key,
         signal: controller.signal,
         instruction: activeCharacter.systemPrompt + ' Give concise, natural spoken replies.',
         credential: async () => {
@@ -634,7 +677,7 @@ export const GlassAIStudio = ({ onScrollToDashboard, isActive = true }) => {
   };
 
   return (
-    <div className="w-full max-w-6xl h-[88vh] bg-[#0c1017]/95 dark-glass rounded-3xl border border-white/15 flex shadow-[0_24px_80px_rgba(0,0,0,0.8)] overflow-hidden backdrop-blur-2xl relative select-text">
+    <div className="w-full max-w-6xl h-[min(88dvh,100%)] bg-[#0c1017]/95 dark-glass rounded-3xl border border-white/15 flex shadow-[0_24px_80px_rgba(0,0,0,0.8)] overflow-hidden backdrop-blur-2xl relative select-text">
       
       {/* Mobile backdrop for sidebar */}
       {isMobileSidebarOpen && (
@@ -721,7 +764,7 @@ export const GlassAIStudio = ({ onScrollToDashboard, isActive = true }) => {
             <div className="flex items-center justify-between p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-[11px] text-emerald-300">
               <span className="flex items-center gap-1.5 font-medium">
                 <ShieldCheck size={14} className="text-emerald-400" />
-                {provider === 'gemini' && isSignedIn ? 'Gemini Cloud Synced' : `${providerInfo.label} Key Active`}
+                {provider === 'gemini' ? 'Gemini Cloud Synced' : `${providerInfo.label} Key Active`}
               </span>
               <button
                 onClick={() => setShowApiKeyModal(true)}
@@ -731,37 +774,12 @@ export const GlassAIStudio = ({ onScrollToDashboard, isActive = true }) => {
               </button>
             </div>
           ) : (
-            <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 space-y-1.5 text-left">
-              <div className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-300">
-                <KeyRound size={13} className="text-amber-400" />
-                <span>{providerInfo.label} API Key Required</span>
-              </div>
-              <p className="text-[10px] text-gray-400 leading-tight">
-                Add your {providerInfo.label} API key to start chatting. Provider quotas and billing apply.
-              </p>
-              <button
-                onClick={() => setShowApiKeyModal(true)}
-                className="w-full py-1.5 text-[10px] bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-white rounded-lg font-semibold flex items-center justify-center gap-1 transition cursor-pointer shadow-md shadow-amber-500/10"
-              >
-                <KeyRound size={11} />
-                <span>Add API Key</span>
-              </button>
-            </div>
+            <button onClick={() => setShowApiKeyModal(true)} className="flex w-full items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-left text-xs text-slate-200 hover:bg-white/10">
+              <KeyRound size={14}/>Set up personal chat
+            </button>
           )}
 
-          {!isSignedIn && (
-            <div className="text-[10px] text-gray-400 text-center pt-0.5">
-              <button
-                type="button"
-                onClick={handleGoogleSignIn}
-                disabled={isSigningIn}
-                className="text-sky-400 hover:text-sky-300 underline font-medium cursor-pointer"
-              >
-                {isSigningIn ? 'Signing In...' : 'Sign in with Google'}
-              </button>
-              <span> to sync across devices</span>
-            </div>
-          )}
+
         </div>
       </div>
 
@@ -872,22 +890,6 @@ export const GlassAIStudio = ({ onScrollToDashboard, isActive = true }) => {
         {/* Message Stream Area */}
         <div ref={messagesContainerRef} role="log" aria-label="Chat messages" aria-live="polite" className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
           
-          {/* Missing API Key Banner */}
-              {!hasKey && (
-                <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/25 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-amber-200 animate-fadeIn shadow-lg">
-                  <div className="flex items-center gap-2.5">
-                    <KeyRound size={16} className="text-amber-400 shrink-0" />
-                    <span>Add a {providerInfo.label} API key to start chatting with {activeCharacter.name}.</span>
-                  </div>
-                  <button
-                    onClick={() => setShowApiKeyModal(true)}
-                    className="px-3.5 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-white font-semibold rounded-xl text-xs shrink-0 transition cursor-pointer active:scale-95 shadow-md shadow-amber-500/20"
-                  >
-                    Add API Key
-                  </button>
-                </div>
-              )}
-
               {/* Welcome Screen when thread is fresh */}
               {(!activeThread?.messages || activeThread.messages.length === 0) && (
                 <div className="py-12 max-w-lg mx-auto text-center space-y-4 animate-fadeIn">
@@ -960,11 +962,17 @@ export const GlassAIStudio = ({ onScrollToDashboard, isActive = true }) => {
                           : 'bg-slate-900/80 border border-white/10 text-slate-100 rounded-bl-xs'
                       }`}
                     >
-                      <FormattedMessage text={msg.text} />
+                      {msg.filenames?.length > 0 && <div className="mb-1 break-all text-xs opacity-80">{msg.filenames.join(' / ')}</div>}
+                      {msg.mediaKey && <GeneratedImage mediaKey={msg.mediaKey} prompt={msg.imagePrompt} />}
+                      {msg.text && <FormattedMessage text={msg.text} />}
                       {!isUser && !msg.isError && msg.usage?.total && (
                         <div className="mt-2 text-[10px] text-gray-500">{msg.modelUsed} · {msg.usage.total} tokens</div>
                       )}
-                      {msg.isError && msg.keyIssue && (
+                      {msg.freeImagePrompt && <button disabled={isGenerating} className="mt-3 block rounded-lg border border-white/20 px-3 py-1 text-xs" onClick={() => {
+                        setInputMessage(msg.freeImagePrompt); setFiles([]); setCreateImage('free'); setToolError('');
+                        toolsRef.current?.parentElement?.querySelector('textarea')?.focus();
+                      }}>Edit and retry image</button>}
+                      {msg.isError && !msg.freeImagePrompt && msg.keyIssue && (
                         <button
                           onClick={() => setShowApiKeyModal(true)}
                           className="mt-2.5 px-3 py-1.5 bg-rose-500/20 hover:bg-rose-500/30 border border-rose-400/40 text-rose-200 text-xs rounded-xl flex items-center gap-1.5 transition cursor-pointer"
@@ -1002,25 +1010,47 @@ export const GlassAIStudio = ({ onScrollToDashboard, isActive = true }) => {
         {/* Input Bar */}
         <div className="p-4 border-t border-white/10 bg-black/35 shrink-0">
           {isVoiceMode && <div role="status" className="mb-2 text-sm text-sky-200">Gemini Live &middot; {voiceStage}</div>}
+          {createImage && <div role="status" className="mb-2 text-xs text-amber-200"><button onClick={() => setCreateImage(false)} className="mr-2 rounded-lg bg-amber-400/15 px-2 py-1" aria-label="Cancel image creation">Create image &times;</button>{createImage === 'free' ? 'Free text-to-image with Cloudflare FLUX. Daily limits apply.' : imageModeNotice(provider)}</div>}
+          {files.length > 0 && <div className="mb-2 flex flex-wrap gap-1 text-xs text-sky-200">{files.map((file, i) =>
+            <button key={i} aria-label={`Remove ${file.name}`} onClick={() => setFiles(files.filter((_, index) => index !== i))} className="max-w-full truncate rounded-lg bg-sky-400/10 px-2 py-1">{file.name} &times;</button>)}
+            {provider === 'groqcloud' && files.some(f => f.type.startsWith('image/')) && <span>Image analysis uses {GROQ_VISION}</span>}
+          </div>}
+          {toolError && <div role="alert" className="mb-2 text-xs text-amber-200">{toolError}</div>}
+          <input ref={uploadRef} type="file" multiple hidden accept={`.txt,.md,.csv,.json${['gemini','groqcloud'].includes(provider) ? ',image/png,image/jpeg,image/webp' : ''}${provider === 'gemini' && !createImage ? ',application/pdf' : ''}`} onChange={event => {
+            const next = [...files, ...event.target.files];
+            event.target.value = '';
+            if (createImage === 'free') { setToolError('Free image creation accepts text only. Cancel image creation to attach files.'); return; }
+            try { validateFiles(next, provider, createImage); setFiles(next); setToolError(''); }
+            catch (error) { setToolError(error.message); }
+          }} />
           <div className="compound-field min-w-0 flex items-center gap-2 bg-black/40 border border-white/15 rounded-2xl px-3 py-2 shadow-inner transition">
             
-            {/* Hands-free voice conversation */}
-            <button
-              onClick={toggleVoiceConversation}
-              type="button"
-              disabled={isGenerating || !activeThread}
-              aria-label={isVoiceMode ? 'End Gemini Live call' : 'Talk to Gemini Live'}
-              aria-pressed={isVoiceMode}
-              className={`p-2 rounded-xl transition cursor-pointer inline-flex items-center gap-1.5 shrink-0 ${
-                isVoiceMode
-                  ? 'bg-rose-500/20 text-rose-200'
-                  : 'text-gray-400 hover:text-white hover:bg-white/10'
-              }`}
-              title={isVoiceMode ? 'End voice conversation' : 'Start voice conversation'}
-            >
-              {isVoiceMode ? <MicOff size={16} /> : <Mic size={16} />}
-              <span className="hidden sm:inline text-xs font-medium">{isVoiceMode ? 'End' : 'Talk'}</span>
-            </button>
+            <div ref={toolsRef} className="relative shrink-0" onKeyDown={event => {
+              if (showTools && event.key === 'Escape') {
+                event.preventDefault(); event.stopPropagation(); setShowTools(false);
+                toolsRef.current.querySelector('button').focus();
+              }
+            }}>
+              <button type="button" disabled={isGenerating || !activeThread} aria-label={isVoiceMode ? 'End Gemini Live call' : 'Composer tools'}
+                aria-expanded={showTools} onClick={() => isVoiceMode ? toggleVoiceConversation() : setShowTools(!showTools)}
+                className="flex items-center gap-1 rounded-xl p-2 text-sky-200 hover:bg-white/10">
+                {isVoiceMode ? <MicOff size={17} /> : <Plus size={18} />}<span className="hidden text-xs sm:inline">{isVoiceMode ? 'End' : 'Tools'}</span>
+              </button>
+              {showTools && <div className="absolute bottom-full left-0 z-20 mb-2 grid w-52 gap-1 rounded-xl border border-white/15 bg-slate-900 p-2 text-left text-sm text-white shadow-xl [&>button]:flex [&>button]:items-center [&>button]:gap-2 [&>button]:rounded-lg [&>button]:p-2 [&>button:hover]:bg-white/10">
+                <button aria-label="Talk to Gemini Live" onClick={() => { setShowTools(false); toggleVoiceConversation(); }}><Mic size={16} />Talk</button>
+                <button onClick={() => { setShowTools(false); uploadRef.current.click(); }}><Paperclip size={16} />Attach files or images</button>
+                <button onClick={() => {
+                  setShowTools(false);
+                  if (files.length) { setToolError('Remove attachments to create a free image from text.'); return; }
+                  setCreateImage('free'); setToolError('');
+                }}><ImageIcon size={16} />Create image (free)</button>
+                {provider === 'gemini' && <button onClick={() => {
+                  setShowTools(false);
+                  try { validateFiles(files, provider, true); setCreateImage('paid'); setToolError(''); }
+                  catch (error) { setToolError(error.message); }
+                }}><ImageIcon size={16} />Gemini image (paid)</button>}
+              </div>}
+            </div>
             {/* Textarea */}
             <textarea
               rows={1}
@@ -1035,9 +1065,9 @@ export const GlassAIStudio = ({ onScrollToDashboard, isActive = true }) => {
                 }
               }}
               placeholder={
-                !hasKey
-                  ? `Add a ${providerInfo.label} API key to chat with ${activeCharacter.name}...`
-                  : `Ask ${activeCharacter.name}... (Press Enter to send, Shift+Enter for newline)`
+                !hasKey && createImage !== 'free'
+                  ? 'Message Ginnie with free GroqCloud chat...'
+                  : createImage ? 'Describe the image to create...' : `Ask ${activeCharacter.name}... (Press Enter to send, Shift+Enter for newline)`
               }
               className="min-w-0 flex-1 bg-transparent text-white placeholder-gray-500 text-xs sm:text-sm focus:outline-none resize-none max-h-32 leading-relaxed disabled:opacity-40 disabled:cursor-not-allowed"
             />
@@ -1045,11 +1075,11 @@ export const GlassAIStudio = ({ onScrollToDashboard, isActive = true }) => {
             {/* Send Button */}
             <button
               onClick={() => handleSendMessage()}
-              aria-label="Send message"
+              aria-label={createImage === 'free' ? 'Generate free image' : createImage ? 'Generate paid image' : 'Send message'}
               disabled={!inputMessage.trim() || isGenerating}
               className="p-2.5 rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 disabled:opacity-30 disabled:cursor-not-allowed text-white shadow-md shadow-sky-500/20 transition cursor-pointer active:scale-95"
             >
-              <Send size={15} />
+              {createImage ? <ImageIcon size={15} /> : <Send size={15} />}
             </button>
           </div>
           {voiceError && <div className="mt-2 text-xs text-rose-300" role="alert">{voiceError}</div>}
@@ -1213,7 +1243,7 @@ export const GlassAIStudio = ({ onScrollToDashboard, isActive = true }) => {
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] font-semibold text-emerald-300 flex items-center gap-1.5">
                     <ShieldCheck size={14} className="text-emerald-400" />
-                    {provider === 'gemini' && isSignedIn ? 'Encrypted & Cloud Synced' : 'Stored in this browser'}
+                    {provider === 'gemini' ? 'Encrypted & Cloud Synced' : 'Stored in this browser'}
                   </span>
                   <button
                     type="button"

@@ -1,3 +1,4 @@
+import { googleSession, recordAiUsage } from './aiAccess';
 export const LIVE_MODEL = 'gemini-3.8-live';
 const endpoint = 'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.';
 
@@ -7,10 +8,12 @@ export function liveSocketUrl({ key, token }) {
   throw new Error('Add a Gemini voice key or sign in for shared voice access.');
 }
 
-export async function startGeminiLive({ credential, instruction, signal, onStage, onTurn, onEnd }) {
+export async function startGeminiLive({ shared = false, credential, instruction, signal, onStage, onTurn, onEnd }) {
   if (!navigator.mediaDevices?.getUserMedia || !window.AudioContext) {
     throw new Error('Microphone access requires the extension, localhost, or HTTPS.');
   }
+  if (shared) await googleSession();
+  else await recordAiUsage('voice');
   signal.throwIfAborted();
   const context = new AudioContext({ sampleRate: 16000 });
   const playing = new Set();
